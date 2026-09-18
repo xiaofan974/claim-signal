@@ -1,0 +1,266 @@
+Refine the existing ClaimSignal implementation without changing the overall visual design, Supabase schema, routing, or working intervention workflow.
+
+The goal of this refinement is to make the CLM-0914 / James Tan scenario communicate one specific product insight more clearly:
+
+ClaimSignal should be able to identify emerging operational risk BEFORE the customer has complained or shown negative sentiment.
+
+Do not add new features.
+Do not redesign the page.
+Do not change the existing risk scores or Supabase data.
+Focus on wording, hierarchy, clarity, and product storytelling.
+
+==================================================
+1. RENAME “AI INTERPRETATION”
+==================================================
+
+Across the Claim Detail experience, replace:
+
+“AI INTERPRETATION”
+
+with:
+
+“AI ASSESSMENT”
+
+or, if visually appropriate:
+
+“CONTEXTUAL ASSESSMENT”
+
+Preferred supporting copy:
+
+“AI assessment based on the claim event record and current operational signals.”
+
+Do not display internal implementation details such as:
+
+- mock_ai_analysis
+- database field names
+- technical JSON terminology
+
+The UI should explain the product, not the implementation.
+
+==================================================
+2. CLM-0914 — JAMES TAN
+==================================================
+
+This claim is an important demo scenario.
+
+The intended product story is:
+
+The customer has not complained.
+The customer has not contacted the insurer.
+However, the claim is already showing operational conditions that could create future dissatisfaction.
+
+Keep the existing:
+
+- Current risk: 61 Medium
+- Previous risk: 39
+- Direction: Increased
+- Customer contacts: 0
+- Documents outstanding: 0
+- Assigned handler: Daniel Koh
+
+Do not change these values.
+
+==================================================
+3. MAKE “0 CUSTOMER CONTACTS” A PROOF POINT
+==================================================
+
+Customer contacts = 0 is strategically important in this scenario.
+
+Ensure it remains highly visible in the claim summary.
+
+Where appropriate, visually reinforce that the system is detecting risk before explicit customer escalation.
+
+Do not imply:
+
+- the customer is angry
+- the customer is dissatisfied
+- the customer has complained
+
+The absence of those signals is the point.
+
+==================================================
+4. REFINE “WHAT CHANGED?”
+==================================================
+
+Keep the existing What Changed? structure.
+
+Change the main contextual headline from:
+
+“No customer complaint yet”
+
+to wording that better communicates the product insight.
+
+Preferred:
+
+“Risk emerging before customer escalation”
+
+Supporting text:
+
+“The customer has not contacted the insurer, but the claim is already showing operational delay signals.”
+
+Keep:
+
+Risk 39 → 61 · increased
+
+Do not make the UI claim that a complaint is inevitable.
+
+==================================================
+5. REFINE THE CONTEXT CHECK CARD
+==================================================
+
+Change the current headline:
+
+“Operational delay is visible before negative sentiment”
+
+to:
+
+“Operational delay detected before customer escalation”
+
+Preferred supporting copy:
+
+“The claim has missed an operational milestone and has had no meaningful update for six days, even though the customer has not contacted the insurer. This is an early-warning condition, not evidence that the customer has complained.”
+
+The wording must remain careful and evidence-based.
+
+Avoid predictive certainty.
+
+Do not write:
+
+- “The customer will complain”
+- “A complaint is likely”
+- “This customer is dissatisfied”
+
+Instead use language such as:
+
+- emerging risk
+- early-warning condition
+- potential escalation
+- preventative intervention
+
+==================================================
+6. REFINE THE AI ASSESSMENT SUMMARY
+==================================================
+
+For CLM-0914, use:
+
+“The customer has not complained, but the claim is stalled and a service milestone has been missed. The combination of inactivity and an overdue assessment creates an opportunity for proactive intervention before the customer needs to chase.”
+
+Keep the existing evidence cards:
+
+Missed milestone
+High
+
+“The assessor milestone is overdue.”
+
+No recent update
+Medium
+
+“Six days since the last meaningful update.”
+
+Do not add unsupported evidence.
+
+==================================================
+7. REFINE THE PREVENTATIVE INTERVENTION
+==================================================
+
+Keep the intervention:
+
+“Escalate external assessor follow-up”
+
+Keep:
+
+Owner:
+Daniel Koh
+
+Urgency:
+24 Hours
+
+Refine the intervention rationale to:
+
+“The assessment milestone is overdue. Proactive follow-up now may prevent the customer from needing to chase for an update.”
+
+If there is a customer communication draft, keep the language proactive and neutral.
+
+It should not apologize for a complaint that has not happened.
+
+Suggested tone:
+
+“Hi James, a quick update on your home claim: we are still waiting for the external assessment and have escalated the follow-up today. We will update you again once the appointment is confirmed.”
+
+==================================================
+8. RISK CONTRIBUTION LABEL
+==================================================
+
+The claim timeline currently displays values such as:
+
++5 risk
++12 risk
+
+Keep these values.
+
+Add a subtle explanatory label or tooltip near the timeline:
+
+“Prototype signal contribution”
+
+Supporting tooltip:
+
+“These values represent transparent prototype risk rules, not trained machine-learning feature importance.”
+
+Do not clutter every timeline row with this explanation.
+
+One subtle label or tooltip is enough.
+
+==================================================
+9. KEEP HUMAN REVIEW VISIBLE
+==================================================
+
+Preserve:
+
+“Human review required”
+
+and:
+
+“This is decision support. A claims professional must review the evidence before any action is scheduled.”
+
+Do not reduce the visibility of this block.
+
+This is an important part of the product concept.
+
+==================================================
+10. PRESERVE FUNCTIONALITY
+==================================================
+
+Do not break or alter:
+
+- Supabase queries
+- claim_events loading
+- intervention loading
+- intervention approval
+- intervention dismissal
+- React Query invalidation
+- claim intervention status updates
+- risk values
+- existing routes
+- search
+- filters
+- responsive behaviour
+
+This task is primarily a UX and product-copy refinement.
+
+==================================================
+11. DEMO SUCCESS CRITERIA
+==================================================
+
+The refinement is successful if a viewer can understand the James Tan scenario in approximately 10 seconds:
+
+1. Risk increased from 39 to 61.
+2. Customer contacts are still 0.
+3. No complaint has occurred.
+4. An operational milestone is overdue.
+5. There has been no meaningful update for six days.
+6. ClaimSignal surfaces the issue as an early-warning condition.
+7. The system recommends proactive follow-up before the customer needs to chase.
+
+The final product insight should feel obvious:
+
+“ClaimSignal can detect operational risk before customer dissatisfaction becomes explicit.”
