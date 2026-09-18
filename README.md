@@ -14,6 +14,8 @@ Claims operations often detect dissatisfaction only after a customer complains, 
 
 ClaimSignal explores an earlier intervention point: operational signals such as stalled milestones, missed updates, repeated contacts, and accepted delays that can reveal a deteriorating claim before dissatisfaction becomes explicit.
 
+![ClaimSignal dashboard](docs/images/dashboard.png)
+
 ## Product hypothesis
 
 If claims teams can combine deterministic operational risk with concise, context-aware AI reasoning, they can:
@@ -34,6 +36,8 @@ The prototype separates risk calculation from AI interpretation. Risk scores rem
 - Operational evidence indicates a deteriorating journey
 - ClaimSignal surfaces the risk change, supporting signals, and a proposed intervention for review
 
+![Sarah visible escalation](docs/images/sarah-visible-escalation.png)
+
 ### James — intervene before a complaint
 
 - Risk rises from **39 → 61**
@@ -42,6 +46,8 @@ The prototype separates risk calculation from AI interpretation. Risk scores rem
 - The claim is operationally delayed even though the customer has not complained
 - ClaimSignal identifies an opportunity for proactive follow-up before James needs to chase
 
+![James early warning](docs/images/james-early-warning.png)
+
 ### Mei — context reduces concern
 
 - Risk falls from **65 → 32**
@@ -49,6 +55,8 @@ The prototype separates risk calculation from AI interpretation. Risk scores rem
 - The customer has explained that the delay is acceptable
 - AI returns `reduces_concern` context adjustments that explain why inactivity should not be treated as deterioration
 - No immediate intervention is recommended
+
+![Mei context adjustment](docs/images/mei-context-adjustment.png)
 
 Together, these scenarios test three different product judgments: obvious deterioration, pre-complaint operational risk, and mitigating context.
 
