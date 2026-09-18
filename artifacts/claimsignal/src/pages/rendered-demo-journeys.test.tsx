@@ -103,7 +103,8 @@ test('rendered CLM-1847 journey shows risk change, operational evidence, structu
   assert.match(html, /Latest operational event/);
   assert.match(html, /Assessment overdue/);
   assert.match(html, /External assessment remains pending/);
-  assert.match(html, /Structured assessment from mock_ai_analysis/);
+  assert.match(html, /AI assessment based on the claim event record and current operational signals/);
+  assert.doesNotMatch(html, /mock_ai_analysis/);
   assert.match(html, /Missed callbacks/);
   assert.match(html, /Two promised callbacks were not completed/);
   assert.match(html, /Prevent escalation/);
@@ -115,14 +116,29 @@ test('rendered CLM-1847 journey shows risk change, operational evidence, structu
 test('rendered CLM-0914 journey explains pre-complaint operational delay', () => {
   const html = renderClaim(
     makeClaim('CLM-0914', {
-      customer_name: 'James Tan', previous_risk_score: 45, risk_score: 61,
-      risk_level: 'medium', context_note: 'Customer has not complained.',
+      customer_name: 'James Tan', previous_risk_score: 39, risk_score: 61,
+      risk_level: 'medium', customer_contact_count: 0, context_note: 'Customer has not complained.',
+      mock_ai_analysis: {
+        summary: 'The customer has not complained, but the claim is stalled and a service milestone has been missed.',
+        signals: [
+          { signal: 'Missed milestone', severity: 'high', evidence: 'The assessor milestone is overdue.' },
+          { signal: 'No recent update', severity: 'medium', evidence: 'Six days since the last meaningful update.' },
+        ],
+        recommended_action: null,
+        draft_customer_message: null,
+      },
     }),
     [makeEvent('CLM-0914', 'Inspection delayed', 'Inspection booking is overdue.')],
   );
   assert.match(html, /61 medium/);
-  assert.match(html, /Operational delay is visible before negative sentiment/);
+  assert.match(html, />39</);
+  assert.match(html, /Customer contacts/);
+  assert.match(html, /No contact yet/);
+  assert.match(html, /Risk emerging before customer escalation/);
+  assert.match(html, /Operational delay detected before customer escalation/);
   assert.match(html, /early-warning condition, not evidence that the customer has complained/);
+  assert.match(html, /opportunity for proactive intervention before the customer needs to chase/);
+  assert.match(html, /Prototype signal contribution/);
 });
 
 test('rendered CLM-2205 journey explains accepted delay and falling risk', () => {

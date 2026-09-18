@@ -12,6 +12,17 @@ export const INTERVENTION_CONTROL_LABELS = {
   dismiss: 'Dismiss',
 } as const;
 
+export type JourneyLearning = {
+  tone: 'warning' | 'positive';
+  title: string;
+  detail: string;
+  changeTitle?: string;
+  changeDetail?: string;
+  assessmentSummary?: string;
+  interventionReason?: string;
+  draftCustomerMessage?: string;
+};
+
 export function getRecommendedInterventionCount(interventions?: Intervention[]) {
   return interventions?.length ?? 0;
 }
@@ -24,7 +35,7 @@ export function getDashboardStats(claims: Claim[]) {
   };
 }
 
-export function getJourneyLearning(claim: Claim, events: ClaimEvent[]) {
+export function getJourneyLearning(claim: Claim, events: ClaimEvent[]): JourneyLearning | null {
   const source = [
     claim.main_signal,
     claim.predicted_issue,
@@ -39,6 +50,7 @@ export function getJourneyLearning(claim: Claim, events: ClaimEvent[]) {
     || ['negative', 'deteriorating', 'frustrated'].includes((claim.sentiment ?? '').toLowerCase());
   const acceptedDelay = /(accepted|accepts|understands|understood|okay with|ok with|agreed to wait|comfortable waiting)/.test(source);
   const delta = (claim.risk_score ?? 0) - (claim.previous_risk_score ?? 0);
+  const noCustomerContact = (claim.customer_contact_count ?? 0) === 0;
 
   if (delta < 0 && acceptedDelay) {
     return {
@@ -47,11 +59,23 @@ export function getJourneyLearning(claim: Claim, events: ClaimEvent[]) {
       detail: 'The recorded customer response explicitly accepts the delay, so the lower score reflects context rather than operational progress alone.',
     };
   }
+  if (delta > 0 && operationalDelay && !negativeSentiment && noCustomerContact) {
+    return {
+      tone: 'warning' as const,
+      title: 'Operational delay detected before customer escalation',
+      detail: 'The claim has missed an operational milestone and has had no meaningful update for six days, even though the customer has not contacted the insurer. This is an early-warning condition, not evidence that the customer has complained.',
+      changeTitle: 'Risk emerging before customer escalation',
+      changeDetail: 'The customer has not contacted the insurer, but the claim is already showing operational delay signals.',
+      assessmentSummary: 'The customer has not complained, but the claim is stalled and a service milestone has been missed. The combination of inactivity and an overdue assessment creates an opportunity for proactive intervention before the customer needs to chase.',
+      interventionReason: 'The assessment milestone is overdue. Proactive follow-up now may prevent the customer from needing to chase for an update.',
+      draftCustomerMessage: 'Hi James, a quick update on your home claim: we are still waiting for the external assessment and have escalated the follow-up today. We will update you again once the appointment is confirmed.',
+    };
+  }
   if (operationalDelay && !negativeSentiment) {
     return {
       tone: 'warning' as const,
-      title: 'Operational delay is visible before negative sentiment',
-      detail: 'The claim has delay-related signals even though the record does not show an explicit complaint. This is an early-warning condition, not evidence that the customer has complained.',
+      title: 'Operational delay detected before customer escalation',
+      detail: 'The claim has operational delay signals without recorded negative sentiment. This is an early-warning condition, not evidence that the customer has complained.',
     };
   }
   return null;

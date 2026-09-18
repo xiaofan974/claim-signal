@@ -69,11 +69,15 @@ test('CLM-1847 preserves the 42 to 78 journey, operational evidence, and structu
 
 test('CLM-0914 identifies operational delay before a complaint', () => {
   const learning = getJourneyLearning(
-    claim('CLM-0914', { previous_risk_score: 45, risk_score: 61, risk_level: 'medium', context_note: 'Customer has not complained.' }),
+    claim('CLM-0914', { previous_risk_score: 39, risk_score: 61, risk_level: 'medium', customer_contact_count: 0, context_note: 'Customer has not complained.' }),
     [event('CLM-0914', 'Inspection delayed', 'Inspection booking is overdue.')],
   );
   assert.equal(learning?.tone, 'warning');
-  assert.equal(learning?.title, 'Operational delay is visible before negative sentiment');
+  assert.equal(learning?.title, 'Operational delay detected before customer escalation');
+  assert.equal(learning?.changeTitle, 'Risk emerging before customer escalation');
+  assert.match(learning?.changeDetail ?? '', /has not contacted the insurer/);
+  assert.match(learning?.assessmentSummary ?? '', /opportunity for proactive intervention/);
+  assert.match(learning?.interventionReason ?? '', /prevent the customer from needing to chase/);
   assert.match(learning?.detail ?? '', /early-warning condition/);
 });
 
