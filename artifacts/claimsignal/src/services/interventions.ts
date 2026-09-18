@@ -7,6 +7,6 @@ export async function listInterventions(status = 'all') {
   return supabase.list<Intervention>('interventions', `?${params.toString()}`);
 }
 
-export function updateIntervention(id: string, body: Partial<Pick<Intervention, 'status' | 'approved_at'>>) {
+export function updateIntervention(id: string, body: Partial<Pick<Intervention, 'status' | 'approved_at' | 'customer_message'>>) {
   return supabase.update<Intervention>('interventions', `?id=eq.${encodeURIComponent(id)}`, body);
 }

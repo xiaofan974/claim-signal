@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type RiskLevel = 'high' | 'medium' | 'low' | string;
 export type InterventionStatus = 'recommended' | 'scheduled' | 'dismissed' | 'completed' | string;
 
@@ -60,16 +62,27 @@ export interface Intervention {
   claim?: Pick<Claim, 'claim_id' | 'customer_name' | 'claim_type' | 'risk_level' | 'risk_score'>;
 }
 
-export interface AiAnalysis {
-  summary?: string;
-  evidence?: string[];
-  contributing_factors?: string[];
-  confidence?: number;
-  next_best_action?: string;
-}
+export const claimAnalysisSchema = z.object({
+  predicted_issue: z.string().nullable().optional(),
+  summary: z.string(),
+  signals: z.array(z.object({
+    signal: z.string(),
+    severity: z.enum(['low', 'medium', 'high']),
+    evidence: z.string(),
+  })).default([]),
+  recommended_action: z.object({
+    action: z.string(),
+    urgency: z.enum(['today', '24_hours', 'this_week']),
+    owner: z.string(),
+    reason: z.string(),
+  }).nullable().optional(),
+  draft_customer_message: z.string().nullable().optional(),
+});
+
+export type ClaimAnalysis = z.infer<typeof claimAnalysisSchema>;
 
 export interface ClaimFilters {
   risk?: string;
-  status?: string;
+  claimType?: string;
   search?: string;
 }

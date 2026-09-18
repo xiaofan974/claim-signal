@@ -10,9 +10,10 @@ import { riskTone } from '@/components/risk-badge';
 export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [risk, setRisk] = useState('all');
-  const [status, setStatus] = useState('all');
-  const { data, isLoading, isError, refetch } = useClaims({ search, risk, status });
+  const [claimType, setClaimType] = useState('all');
+  const { data, isLoading, isError, refetch } = useClaims({ search, risk, claimType });
   const claims = data ?? [];
+  const todayLabel = useMemo(() => new Intl.DateTimeFormat('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()), []);
   const stats = useMemo(() => ({
     atRisk: claims.filter((c) => ['high', 'critical'].includes(riskTone(c.risk_level))).length,
     rising: claims.filter((c) => (c.risk_score ?? 0) > (c.previous_risk_score ?? 0)).length,
@@ -21,7 +22,7 @@ export default function Dashboard() {
   return <AppShell>
     <div className="animate-rise-in">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-        <div><p className="mono text-[10px] uppercase tracking-[.18em] text-primary">Monday · 24 June 2024</p><h1 className="mt-2 text-[30px] font-semibold tracking-[-.04em] sm:text-[36px]">Good morning, Jordan.</h1><p className="mt-2 max-w-xl text-sm text-muted-foreground">A focused view of the claims where a timely human decision can change the outcome.</p></div>
+        <div><p className="mono text-[10px] uppercase tracking-[.18em] text-primary">{todayLabel}</p><h1 className="mt-2 text-[30px] font-semibold tracking-[-.04em] sm:text-[36px]">Claims needing attention</h1><p className="mt-2 max-w-xl text-sm text-muted-foreground">Prioritized by emerging complaint and customer-outcome risk.</p></div>
         <Link href="/interventions" className="inline-flex items-center gap-2 self-start rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-primary shadow-sm transition-colors hover:bg-muted sm:self-auto" data-testid="link-view-interventions">Review intervention queue <ArrowRight size={14} /></Link>
       </div>
       <div className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -33,9 +34,9 @@ export default function Dashboard() {
         <div className="flex flex-col gap-4 border-b border-border/80 p-5 lg:flex-row lg:items-center lg:justify-between lg:px-6">
           <div><div className="flex items-center gap-2"><h2 className="font-semibold tracking-[-.02em]">Claims needing attention</h2><span className="rounded-full bg-muted px-2 py-0.5 mono text-[10px] text-muted-foreground">{claims.length}</span></div><p className="mt-1 text-xs text-muted-foreground">Ordered by risk, then most recent signal.</p></div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="relative flex min-w-[220px] items-center"><Search size={15} className="absolute left-3 text-muted-foreground" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search claim or customer" className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-xs outline-none ring-primary transition focus:ring-2" data-testid="input-search-claims" /></label>
+            <label className="relative flex min-w-[220px] items-center"><Search size={15} className="absolute left-3 text-muted-foreground" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Claim, customer or handler" className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-xs outline-none ring-primary transition focus:ring-2" data-testid="input-search-claims" /></label>
             <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5"><Filter size={14} className="text-muted-foreground" /><select value={risk} onChange={(e) => setRisk(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-risk"><option value="all">All risk</option><option value="high">High risk</option><option value="medium">Medium risk</option><option value="low">Low risk</option></select><ChevronDown size={13} className="text-muted-foreground" /></label>
-            <label className="hidden h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5 sm:flex"><SlidersHorizontal size={14} className="text-muted-foreground" /><select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-status"><option value="all">All statuses</option><option value="open">Open</option><option value="assessment">Assessment</option><option value="pending">Pending</option></select></label>
+            <label className="hidden h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5 sm:flex"><SlidersHorizontal size={14} className="text-muted-foreground" /><select value={claimType} onChange={(e) => setClaimType(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-claim-type"><option value="all">All claim types</option><option value="Motor">Motor</option><option value="Home">Home</option><option value="Travel">Travel</option></select></label>
           </div>
         </div>
         {isLoading ? <div className="p-6"><PageSkeleton /></div> : isError ? <div className="p-6"><DataProblem onRetry={() => refetch()} /></div> : claims.length === 0 ? <div className="p-6"><EmptyState title="No claims match these filters" detail="Try clearing a filter or searching for a different claim." /></div> : <div className="relative">{claims.map((claim, index) => <ClaimRow key={claim.id} claim={claim} index={index} />)}</div>}
