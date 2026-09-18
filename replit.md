@@ -34,6 +34,12 @@ AI-powered early warning and human-reviewed intervention planning for insurance 
 - Existing Supabase seed data is the demo source of truth; the prototype risk calculator never overwrites curated scores.
 - AI analysis is structured mock data for V1, parsed defensively with deterministic evidence-based fallback.
 - Scheduling or dismissing an intervention updates both its audit record and the claim summary; no communication is sent.
+- Live claim-analysis protection uses PostgreSQL as its shared store so it remains consistent when API instances are scaled horizontally:
+  - Validated analysis responses are cached in `claim_analysis_cache` for 60 seconds.
+  - `claim_analysis_locks` uses a 15-second lease and polling so concurrent instances share one upstream request; an abandoned lease can be taken over.
+  - `claim_analysis_rate_limits` stores one counter per client key and resets after 60 seconds.
+  - Shared-store failures fail closed with HTTP 503 rather than falling back to process-local state and bypassing protection. Upstream failures retain their normal 502/504 responses.
+  - The tables are part of the Drizzle schema and must be applied with the normal database push/publish flow.
 
 ## Product
 

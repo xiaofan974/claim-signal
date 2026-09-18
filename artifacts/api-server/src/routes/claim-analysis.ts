@@ -1,20 +1,24 @@
-import { Router, type IRouter, type Request } from "express";
+import { randomUUID } from "node:crypto";
+import {
+  Router,
+  type IRouter,
+  type Request,
+  type Response,
+} from "express";
+import { pool } from "@workspace/db";
 import { AnalyzeClaimBody, AnalyzeClaimResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 const EDGE_FUNCTION_TIMEOUT_MS = 12_000;
 const ANALYSIS_CACHE_TTL_MS = 60_000;
+const ANALYSIS_LOCK_LEASE_MS = EDGE_FUNCTION_TIMEOUT_MS + 3_000;
+const ANALYSIS_WAIT_TIMEOUT_MS = ANALYSIS_LOCK_LEASE_MS + 3_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
-const MAX_RATE_LIMIT_CLIENTS = 10_000;
 const MAX_CACHED_ANALYSES = 1_000;
+const STORE_POLL_INTERVAL_MS = 100;
 
 type AnalyzeClaimResponseData = ReturnType<typeof AnalyzeClaimResponse.parse>;
-
-type CacheEntry = {
-  data: AnalyzeClaimResponseData;
-  expiresAt: number;
-};
 
 type RateLimitEntry = {
   count: number;
@@ -32,96 +36,182 @@ class ClaimAnalysisError extends Error {
   }
 }
 
-const analysisCache = new Map<string, CacheEntry>();
-const inFlightAnalyses = new Map<string, Promise<AnalyzeClaimResponseData>>();
-const rateLimitEntries = new Map<string, RateLimitEntry>();
+class SharedStoreError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "SharedStoreError";
+  }
+}
 
 function getClientKey(req: Request): string {
   return req.ip || req.socket.remoteAddress || "unknown";
 }
 
-function consumeRateLimit(clientKey: string, now = Date.now()): RateLimitEntry {
-  const existing = rateLimitEntries.get(clientKey);
-  if (!existing || existing.resetAt <= now) {
-    const entry = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
-    rateLimitEntries.set(clientKey, entry);
-    trimRateLimitEntries(now);
-    return entry;
-  }
-
-  existing.count += 1;
-  return existing;
-}
-
-function trimRateLimitEntries(now: number): void {
-  for (const [key, entry] of rateLimitEntries) {
-    if (entry.resetAt <= now) {
-      rateLimitEntries.delete(key);
+async function consumeRateLimit(clientKey: string): Promise<RateLimitEntry> {
+  try {
+    await pool.query(
+      "DELETE FROM claim_analysis_rate_limits WHERE reset_at <= NOW()",
+    );
+    const result = await pool.query<{
+      count: number;
+      reset_at: Date;
+    }>(
+      `
+        INSERT INTO claim_analysis_rate_limits (client_key, count, reset_at)
+        VALUES ($1, 1, NOW() + ($2 * INTERVAL '1 millisecond'))
+        ON CONFLICT (client_key) DO UPDATE
+        SET
+          count = CASE
+            WHEN claim_analysis_rate_limits.reset_at <= NOW() THEN 1
+            ELSE claim_analysis_rate_limits.count + 1
+          END,
+          reset_at = CASE
+            WHEN claim_analysis_rate_limits.reset_at <= NOW()
+              THEN NOW() + ($2 * INTERVAL '1 millisecond')
+            ELSE claim_analysis_rate_limits.reset_at
+          END
+        RETURNING count, reset_at
+      `,
+      [clientKey, RATE_LIMIT_WINDOW_MS],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error("The shared rate-limit store returned no row.");
     }
-  }
-
-  if (rateLimitEntries.size <= MAX_RATE_LIMIT_CLIENTS) {
-    return;
-  }
-
-  const oldest = [...rateLimitEntries.entries()]
-    .sort(([, left], [, right]) => left.resetAt - right.resetAt)
-    .slice(0, rateLimitEntries.size - MAX_RATE_LIMIT_CLIENTS);
-  for (const [key] of oldest) {
-    rateLimitEntries.delete(key);
+    return { count: row.count, resetAt: row.reset_at.getTime() };
+  } catch (error) {
+    throw new SharedStoreError("The shared rate-limit store is unavailable.", {
+      cause: error,
+    });
   }
 }
 
-function getCachedAnalysis(
+async function getCachedAnalysis(
   claimId: string,
-  now = Date.now(),
-): AnalyzeClaimResponseData | null {
-  const entry = analysisCache.get(claimId);
-  if (!entry) {
-    return null;
-  }
+): Promise<AnalyzeClaimResponseData | null> {
+  try {
+    const result = await pool.query<{ response: unknown }>(
+      `
+        SELECT response
+        FROM claim_analysis_cache
+        WHERE claim_id = $1 AND expires_at > NOW()
+      `,
+      [claimId],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return null;
+    }
 
-  if (entry.expiresAt <= now) {
-    analysisCache.delete(claimId);
-    return null;
-  }
+    const parsed = AnalyzeClaimResponse.strict().safeParse(row.response);
+    if (parsed.success) {
+      return parsed.data;
+    }
 
-  return entry.data;
+    await pool.query(
+      "DELETE FROM claim_analysis_cache WHERE claim_id = $1",
+      [claimId],
+    );
+    return null;
+  } catch (error) {
+    throw new SharedStoreError("The shared analysis cache is unavailable.", {
+      cause: error,
+    });
+  }
 }
 
-function cacheAnalysis(
+async function cacheAnalysis(
   claimId: string,
   data: AnalyzeClaimResponseData,
-  now = Date.now(),
-): void {
-  analysisCache.delete(claimId);
-  analysisCache.set(claimId, {
-    data,
-    expiresAt: now + ANALYSIS_CACHE_TTL_MS,
-  });
-
-  while (analysisCache.size > MAX_CACHED_ANALYSES) {
-    const oldestClaimId = analysisCache.keys().next().value;
-    if (oldestClaimId === undefined) {
-      break;
-    }
-    analysisCache.delete(oldestClaimId);
+): Promise<void> {
+  try {
+    await pool.query(
+      `
+        INSERT INTO claim_analysis_cache
+          (claim_id, response, expires_at, updated_at)
+        VALUES
+          ($1, $2::jsonb,
+           NOW() + ($3 * INTERVAL '1 millisecond'), NOW())
+        ON CONFLICT (claim_id) DO UPDATE
+        SET
+          response = EXCLUDED.response,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [claimId, JSON.stringify(data), ANALYSIS_CACHE_TTL_MS],
+    );
+    await pool.query(
+      `
+        DELETE FROM claim_analysis_cache
+        WHERE claim_id IN (
+          SELECT claim_id
+          FROM claim_analysis_cache
+          ORDER BY updated_at DESC
+          OFFSET $1
+        )
+      `,
+      [MAX_CACHED_ANALYSES],
+    );
+  } catch (error) {
+    throw new SharedStoreError("The shared analysis cache is unavailable.", {
+      cause: error,
+    });
   }
 }
 
-function edgeFunctionConfig() {
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const publishableKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY ??
-    process.env.SUPABASE_ANON_KEY ??
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+async function acquireAnalysisLock(
+  claimId: string,
+  ownerToken: string,
+): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      `
+        INSERT INTO claim_analysis_locks
+          (claim_id, owner_token, lease_until)
+        VALUES
+          ($1, $2, NOW() + ($3 * INTERVAL '1 millisecond'))
+        ON CONFLICT (claim_id) DO UPDATE
+        SET
+          owner_token = EXCLUDED.owner_token,
+          lease_until = EXCLUDED.lease_until
+        WHERE claim_analysis_locks.lease_until <= NOW()
+        RETURNING claim_id
+      `,
+      [claimId, ownerToken, ANALYSIS_LOCK_LEASE_MS],
+    );
+    return result.rows.length > 0;
+  } catch (error) {
+    throw new SharedStoreError(
+      "The shared analysis lock store is unavailable.",
+      { cause: error },
+    );
+  }
+}
 
-  return supabaseUrl && publishableKey
-    ? {
-        url: `${supabaseUrl.replace(/\/$/, "")}/functions/v1/analyze-claim`,
-        publishableKey,
-      }
-    : null;
+async function releaseAnalysisLock(
+  claimId: string,
+  ownerToken: string,
+): Promise<void> {
+  try {
+    await pool.query(
+      `
+        DELETE FROM claim_analysis_locks
+        WHERE claim_id = $1 AND owner_token = $2
+      `,
+      [claimId, ownerToken],
+    );
+  } catch (error) {
+    throw new SharedStoreError(
+      "The shared analysis lock store is unavailable.",
+      { cause: error },
+    );
+  }
+}
+
+function waitForStorePoll(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, STORE_POLL_INTERVAL_MS);
+  });
 }
 
 async function fetchLiveAnalysis(
@@ -181,26 +271,65 @@ async function fetchLiveAnalysis(
   }
 }
 
-function getOrStartLiveAnalysis(
+async function runLiveAnalysis(
   claimId: string,
   config: { url: string; publishableKey: string },
-): { promise: Promise<AnalyzeClaimResponseData>; shared: boolean } {
-  const existing = inFlightAnalyses.get(claimId);
-  if (existing) {
-    return { promise: existing, shared: true };
+  ownerToken: string,
+): Promise<AnalyzeClaimResponseData> {
+  try {
+    const data = await fetchLiveAnalysis(claimId, config);
+    await cacheAnalysis(claimId, data);
+    return data;
+  } finally {
+    await releaseAnalysisLock(claimId, ownerToken);
+  }
+}
+
+async function getOrStartLiveAnalysis(
+  claimId: string,
+  config: { url: string; publishableKey: string },
+): Promise<{
+  promise: Promise<AnalyzeClaimResponseData>;
+  shared: boolean;
+}> {
+  const ownerToken = randomUUID();
+  if (await acquireAnalysisLock(claimId, ownerToken)) {
+    return {
+      promise: runLiveAnalysis(claimId, config, ownerToken),
+      shared: false,
+    };
   }
 
-  const promise = fetchLiveAnalysis(claimId, config)
-    .then((data) => {
-      cacheAnalysis(claimId, data);
-      return data;
-    })
-    .finally(() => {
-      inFlightAnalyses.delete(claimId);
-    });
+  const waitDeadline = Date.now() + ANALYSIS_WAIT_TIMEOUT_MS;
+  while (Date.now() < waitDeadline) {
+    const cached = await getCachedAnalysis(claimId);
+    if (cached) {
+      return { promise: Promise.resolve(cached), shared: true };
+    }
 
-  inFlightAnalyses.set(claimId, promise);
-  return { promise, shared: false };
+    if (await acquireAnalysisLock(claimId, ownerToken)) {
+      return {
+        promise: runLiveAnalysis(claimId, config, ownerToken),
+        shared: false,
+      };
+    }
+    await waitForStorePoll();
+  }
+
+  throw new SharedStoreError(
+    "Timed out waiting for shared claim analysis coordination.",
+  );
+}
+
+function respondStoreUnavailable(
+  req: Request,
+  res: Response,
+  error: unknown,
+): void {
+  req.log.error({ err: error }, "Shared claim analysis store unavailable");
+  res.status(503).json({
+    error: "Live claim analysis is temporarily unavailable.",
+  });
 }
 
 router.post("/claim-analysis", async (req, res): Promise<void> => {
@@ -211,7 +340,14 @@ router.post("/claim-analysis", async (req, res): Promise<void> => {
   }
 
   const clientKey = getClientKey(req);
-  const rateLimit = consumeRateLimit(clientKey);
+  let rateLimit: RateLimitEntry;
+  try {
+    rateLimit = await consumeRateLimit(clientKey);
+  } catch (error) {
+    respondStoreUnavailable(req, res, error);
+    return;
+  }
+
   if (rateLimit.count > RATE_LIMIT_MAX_REQUESTS) {
     const retryAfterSeconds = Math.max(
       1,
@@ -227,7 +363,13 @@ router.post("/claim-analysis", async (req, res): Promise<void> => {
     return;
   }
 
-  const cached = getCachedAnalysis(body.data.claim_id);
+  let cached: AnalyzeClaimResponseData | null;
+  try {
+    cached = await getCachedAnalysis(body.data.claim_id);
+  } catch (error) {
+    respondStoreUnavailable(req, res, error);
+    return;
+  }
   if (cached) {
     req.log.info(
       { cacheOutcome: "hit", rateOutcome: "allowed" },
@@ -247,7 +389,13 @@ router.post("/claim-analysis", async (req, res): Promise<void> => {
     return;
   }
 
-  const analysis = getOrStartLiveAnalysis(body.data.claim_id, config);
+  let analysis: Awaited<ReturnType<typeof getOrStartLiveAnalysis>>;
+  try {
+    analysis = await getOrStartLiveAnalysis(body.data.claim_id, config);
+  } catch (error) {
+    respondStoreUnavailable(req, res, error);
+    return;
+  }
   req.log.info(
     {
       cacheOutcome: analysis.shared ? "in_flight" : "miss",
@@ -266,6 +414,10 @@ router.post("/claim-analysis", async (req, res): Promise<void> => {
     );
     res.json(data);
   } catch (error) {
+    if (error instanceof SharedStoreError) {
+      respondStoreUnavailable(req, res, error);
+      return;
+    }
     if (error instanceof ClaimAnalysisError) {
       if (error.kind === "invalid") {
         req.log.warn(
@@ -297,5 +449,20 @@ router.post("/claim-analysis", async (req, res): Promise<void> => {
     res.status(502).json({ error: "Live claim analysis failed." });
   }
 });
+
+function edgeFunctionConfig() {
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const publishableKey =
+    process.env.SUPABASE_PUBLISHABLE_KEY ??
+    process.env.SUPABASE_ANON_KEY ??
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  return supabaseUrl && publishableKey
+    ? {
+        url: `${supabaseUrl.replace(/\/$/, "")}/functions/v1/analyze-claim`,
+        publishableKey,
+      }
+    : null;
+}
 
 export default router;
