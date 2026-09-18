@@ -8,7 +8,6 @@ import {
 import { pool } from "@workspace/db";
 import { AnalyzeClaimBody, AnalyzeClaimResponse } from "@workspace/api-zod";
 
-const router: IRouter = Router();
 const EDGE_FUNCTION_TIMEOUT_MS = 12_000;
 const ANALYSIS_CACHE_TTL_MS = 60_000;
 const ANALYSIS_LOCK_LEASE_MS = EDGE_FUNCTION_TIMEOUT_MS + 3_000;
@@ -17,6 +16,8 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 const MAX_CACHED_ANALYSES = 1_000;
 const STORE_POLL_INTERVAL_MS = 100;
+
+export type ClaimAnalysisStore = Pick<typeof pool, "query">;
 
 type AnalyzeClaimResponseData = ReturnType<typeof AnalyzeClaimResponse.parse>;
 
@@ -47,12 +48,15 @@ function getClientKey(req: Request): string {
   return req.ip || req.socket.remoteAddress || "unknown";
 }
 
-async function consumeRateLimit(clientKey: string): Promise<RateLimitEntry> {
+async function consumeRateLimit(
+  store: ClaimAnalysisStore,
+  clientKey: string,
+): Promise<RateLimitEntry> {
   try {
-    await pool.query(
+    await store.query(
       "DELETE FROM claim_analysis_rate_limits WHERE reset_at <= NOW()",
     );
-    const result = await pool.query<{
+    const result = await store.query<{
       count: number;
       reset_at: Date;
     }>(
@@ -87,10 +91,11 @@ async function consumeRateLimit(clientKey: string): Promise<RateLimitEntry> {
 }
 
 async function getCachedAnalysis(
+  store: ClaimAnalysisStore,
   claimId: string,
 ): Promise<AnalyzeClaimResponseData | null> {
   try {
-    const result = await pool.query<{ response: unknown }>(
+    const result = await store.query<{ response: unknown }>(
       `
         SELECT response
         FROM claim_analysis_cache
@@ -108,7 +113,7 @@ async function getCachedAnalysis(
       return parsed.data;
     }
 
-    await pool.query(
+    await store.query(
       "DELETE FROM claim_analysis_cache WHERE claim_id = $1",
       [claimId],
     );
@@ -121,11 +126,12 @@ async function getCachedAnalysis(
 }
 
 async function cacheAnalysis(
+  store: ClaimAnalysisStore,
   claimId: string,
   data: AnalyzeClaimResponseData,
 ): Promise<void> {
   try {
-    await pool.query(
+    await store.query(
       `
         INSERT INTO claim_analysis_cache
           (claim_id, response, expires_at, updated_at)
@@ -140,7 +146,7 @@ async function cacheAnalysis(
       `,
       [claimId, JSON.stringify(data), ANALYSIS_CACHE_TTL_MS],
     );
-    await pool.query(
+    await store.query(
       `
         DELETE FROM claim_analysis_cache
         WHERE claim_id IN (
@@ -160,11 +166,12 @@ async function cacheAnalysis(
 }
 
 async function acquireAnalysisLock(
+  store: ClaimAnalysisStore,
   claimId: string,
   ownerToken: string,
 ): Promise<boolean> {
   try {
-    const result = await pool.query(
+    const result = await store.query(
       `
         INSERT INTO claim_analysis_locks
           (claim_id, owner_token, lease_until)
@@ -189,11 +196,12 @@ async function acquireAnalysisLock(
 }
 
 async function releaseAnalysisLock(
+  store: ClaimAnalysisStore,
   claimId: string,
   ownerToken: string,
 ): Promise<void> {
   try {
-    await pool.query(
+    await store.query(
       `
         DELETE FROM claim_analysis_locks
         WHERE claim_id = $1 AND owner_token = $2
@@ -272,20 +280,22 @@ async function fetchLiveAnalysis(
 }
 
 async function runLiveAnalysis(
+  store: ClaimAnalysisStore,
   claimId: string,
   config: { url: string; publishableKey: string },
   ownerToken: string,
 ): Promise<AnalyzeClaimResponseData> {
   try {
     const data = await fetchLiveAnalysis(claimId, config);
-    await cacheAnalysis(claimId, data);
+    await cacheAnalysis(store, claimId, data);
     return data;
   } finally {
-    await releaseAnalysisLock(claimId, ownerToken);
+    await releaseAnalysisLock(store, claimId, ownerToken);
   }
 }
 
 async function getOrStartLiveAnalysis(
+  store: ClaimAnalysisStore,
   claimId: string,
   config: { url: string; publishableKey: string },
 ): Promise<{
@@ -293,23 +303,23 @@ async function getOrStartLiveAnalysis(
   shared: boolean;
 }> {
   const ownerToken = randomUUID();
-  if (await acquireAnalysisLock(claimId, ownerToken)) {
+  if (await acquireAnalysisLock(store, claimId, ownerToken)) {
     return {
-      promise: runLiveAnalysis(claimId, config, ownerToken),
+      promise: runLiveAnalysis(store, claimId, config, ownerToken),
       shared: false,
     };
   }
 
   const waitDeadline = Date.now() + ANALYSIS_WAIT_TIMEOUT_MS;
   while (Date.now() < waitDeadline) {
-    const cached = await getCachedAnalysis(claimId);
+    const cached = await getCachedAnalysis(store, claimId);
     if (cached) {
       return { promise: Promise.resolve(cached), shared: true };
     }
 
-    if (await acquireAnalysisLock(claimId, ownerToken)) {
+    if (await acquireAnalysisLock(store, claimId, ownerToken)) {
       return {
-        promise: runLiveAnalysis(claimId, config, ownerToken),
+        promise: runLiveAnalysis(store, claimId, config, ownerToken),
         shared: false,
       };
     }
@@ -332,123 +342,135 @@ function respondStoreUnavailable(
   });
 }
 
-router.post("/claim-analysis", async (req, res): Promise<void> => {
-  const body = AnalyzeClaimBody.strict().safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: "A valid claim_id is required." });
-    return;
-  }
+export function createClaimAnalysisRouter(
+  store: ClaimAnalysisStore = pool,
+): IRouter {
+  const router: IRouter = Router();
 
-  const clientKey = getClientKey(req);
-  let rateLimit: RateLimitEntry;
-  try {
-    rateLimit = await consumeRateLimit(clientKey);
-  } catch (error) {
-    respondStoreUnavailable(req, res, error);
-    return;
-  }
+  router.post("/claim-analysis", async (req, res): Promise<void> => {
+    const body = AnalyzeClaimBody.strict().safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "A valid claim_id is required." });
+      return;
+    }
 
-  if (rateLimit.count > RATE_LIMIT_MAX_REQUESTS) {
-    const retryAfterSeconds = Math.max(
-      1,
-      Math.ceil((rateLimit.resetAt - Date.now()) / 1_000),
-    );
-    req.log.warn(
-      { cacheOutcome: "not_checked", rateOutcome: "limited" },
-      "Claim analysis request rate limited",
-    );
-    res.status(429).set("Retry-After", String(retryAfterSeconds)).json({
-      error: "Too many live claim analysis requests. Try again shortly.",
-    });
-    return;
-  }
-
-  let cached: AnalyzeClaimResponseData | null;
-  try {
-    cached = await getCachedAnalysis(body.data.claim_id);
-  } catch (error) {
-    respondStoreUnavailable(req, res, error);
-    return;
-  }
-  if (cached) {
-    req.log.info(
-      { cacheOutcome: "hit", rateOutcome: "allowed" },
-      "Claim analysis served from cache",
-    );
-    res.json(cached);
-    return;
-  }
-
-  const config = edgeFunctionConfig();
-  if (!config) {
-    req.log.error(
-      { cacheOutcome: "miss", rateOutcome: "allowed" },
-      "Supabase Edge Function configuration is unavailable",
-    );
-    res.status(502).json({ error: "Live claim analysis is unavailable." });
-    return;
-  }
-
-  let analysis: Awaited<ReturnType<typeof getOrStartLiveAnalysis>>;
-  try {
-    analysis = await getOrStartLiveAnalysis(body.data.claim_id, config);
-  } catch (error) {
-    respondStoreUnavailable(req, res, error);
-    return;
-  }
-  req.log.info(
-    {
-      cacheOutcome: analysis.shared ? "in_flight" : "miss",
-      rateOutcome: "allowed",
-    },
-    analysis.shared
-      ? "Claim analysis joined in-flight request"
-      : "Claim analysis request started",
-  );
-
-  try {
-    const data = await analysis.promise;
-    req.log.info(
-      { cacheOutcome: "validated", rateOutcome: "allowed" },
-      "Claim analysis completed",
-    );
-    res.json(data);
-  } catch (error) {
-    if (error instanceof SharedStoreError) {
+    const clientKey = getClientKey(req);
+    let rateLimit: RateLimitEntry;
+    try {
+      rateLimit = await consumeRateLimit(store, clientKey);
+    } catch (error) {
       respondStoreUnavailable(req, res, error);
       return;
     }
-    if (error instanceof ClaimAnalysisError) {
-      if (error.kind === "invalid") {
+
+    if (rateLimit.count > RATE_LIMIT_MAX_REQUESTS) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((rateLimit.resetAt - Date.now()) / 1_000),
+      );
+      req.log.warn(
+        { cacheOutcome: "not_checked", rateOutcome: "limited" },
+        "Claim analysis request rate limited",
+      );
+      res.status(429).set("Retry-After", String(retryAfterSeconds)).json({
+        error: "Too many live claim analysis requests. Try again shortly.",
+      });
+      return;
+    }
+
+    let cached: AnalyzeClaimResponseData | null;
+    try {
+      cached = await getCachedAnalysis(store, body.data.claim_id);
+    } catch (error) {
+      respondStoreUnavailable(req, res, error);
+      return;
+    }
+    if (cached) {
+      req.log.info(
+        { cacheOutcome: "hit", rateOutcome: "allowed" },
+        "Claim analysis served from cache",
+      );
+      res.json(cached);
+      return;
+    }
+
+    const config = edgeFunctionConfig();
+    if (!config) {
+      req.log.error(
+        { cacheOutcome: "miss", rateOutcome: "allowed" },
+        "Supabase Edge Function configuration is unavailable",
+      );
+      res.status(502).json({ error: "Live claim analysis is unavailable." });
+      return;
+    }
+
+    let analysis: Awaited<ReturnType<typeof getOrStartLiveAnalysis>>;
+    try {
+      analysis = await getOrStartLiveAnalysis(
+        store,
+        body.data.claim_id,
+        config,
+      );
+    } catch (error) {
+      respondStoreUnavailable(req, res, error);
+      return;
+    }
+    req.log.info(
+      {
+        cacheOutcome: analysis.shared ? "in_flight" : "miss",
+        rateOutcome: "allowed",
+      },
+      analysis.shared
+        ? "Claim analysis joined in-flight request"
+        : "Claim analysis request started",
+    );
+
+    try {
+      const data = await analysis.promise;
+      req.log.info(
+        { cacheOutcome: "validated", rateOutcome: "allowed" },
+        "Claim analysis completed",
+      );
+      res.json(data);
+    } catch (error) {
+      if (error instanceof SharedStoreError) {
+        respondStoreUnavailable(req, res, error);
+        return;
+      }
+      if (error instanceof ClaimAnalysisError) {
+        if (error.kind === "invalid") {
+          req.log.warn(
+            { cacheOutcome: "not_cached", rateOutcome: "allowed" },
+            "Supabase claim analysis returned an invalid response",
+          );
+          res.status(502).json({ error: error.message });
+          return;
+        }
+        if (error.kind === "timeout") {
+          req.log.warn(
+            { cacheOutcome: "not_cached", rateOutcome: "allowed" },
+            "Supabase claim analysis timed out",
+          );
+          res.status(504).json({ error: error.message });
+          return;
+        }
         req.log.warn(
           { cacheOutcome: "not_cached", rateOutcome: "allowed" },
-          "Supabase claim analysis returned an invalid response",
+          "Supabase claim analysis request failed",
         );
         res.status(502).json({ error: error.message });
         return;
       }
-      if (error.kind === "timeout") {
-        req.log.warn(
-          { cacheOutcome: "not_cached", rateOutcome: "allowed" },
-          "Supabase claim analysis timed out",
-        );
-        res.status(504).json({ error: error.message });
-        return;
-      }
-      req.log.warn(
+      req.log.error(
         { cacheOutcome: "not_cached", rateOutcome: "allowed" },
         "Supabase claim analysis request failed",
       );
-      res.status(502).json({ error: error.message });
-      return;
+      res.status(502).json({ error: "Live claim analysis failed." });
     }
-    req.log.error(
-      { cacheOutcome: "not_cached", rateOutcome: "allowed" },
-      "Supabase claim analysis request failed",
-    );
-    res.status(502).json({ error: "Live claim analysis failed." });
-  }
-});
+  });
+
+  return router;
+}
 
 function edgeFunctionConfig() {
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
@@ -465,4 +487,4 @@ function edgeFunctionConfig() {
     : null;
 }
 
-export default router;
+export default createClaimAnalysisRouter();
