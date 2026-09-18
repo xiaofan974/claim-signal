@@ -146,13 +146,31 @@ test('rendered CLM-2205 journey explains accepted delay and falling risk', () =>
   const html = renderClaim(
     makeClaim('CLM-2205', {
       customer_name: 'Mei Chen', previous_risk_score: 65, risk_score: 32,
-      risk_level: 'low', latest_customer_message: 'I understand and am comfortable waiting.',
+      risk_level: 'low', days_since_last_update: 9,
+      latest_customer_message: 'I’m still overseas, so no rush until I’m back next week.',
+      mock_ai_analysis: {
+        summary: 'The claim appears delayed.',
+        signals: [{ signal: 'Long inactivity', severity: 'low', evidence: 'Nine days since the last operational update.' }],
+        recommended_action: null,
+        draft_customer_message: null,
+      },
     }),
-    [makeEvent('CLM-2205', 'Repair delayed', 'Parts remain pending.', -33)],
+    [
+      makeEvent('CLM-2205', 'Customer requested hold', 'Customer advised they were travelling and asked to pause processing.', -18),
+      makeEvent('CLM-2205', 'Delay reaffirmed', 'Customer confirmed there was no urgency until return.', -15),
+    ],
   );
   assert.match(html, /32 low/);
   assert.match(html, />65</);
   assert.match(html, /Decreased/);
-  assert.match(html, /Customer context lowers the apparent risk/);
-  assert.match(html, /explicitly accepts the delay/);
+  assert.match(html, /Customer context reduced apparent risk/);
+  assert.match(html, /Delay is expected and customer-approved/);
+  assert.match(html, /context reduces the significance of inactivity as an escalation signal/);
+  assert.match(html, /Customer-requested hold/);
+  assert.match(html, /Mitigating context/);
+  assert.match(html, /No immediate intervention recommended/);
+  assert.match(html, /Continue monitoring and resume processing on the agreed return date/);
+  assert.match(html, /Resume claim processing on agreed date/);
+  assert.match(html, /claims professional remains responsible/);
+  assert.doesNotMatch(html, /No open recommendation is associated/);
 });

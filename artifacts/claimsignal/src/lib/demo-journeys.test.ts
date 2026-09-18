@@ -83,12 +83,20 @@ test('CLM-0914 identifies operational delay before a complaint', () => {
 
 test('CLM-2205 identifies accepted delay and falling risk', () => {
   const learning = getJourneyLearning(
-    claim('CLM-2205', { previous_risk_score: 65, risk_score: 32, risk_level: 'low', latest_customer_message: 'I understand and am comfortable waiting.' }),
-    [event('CLM-2205', 'Repair delayed', 'Parts remain pending.')],
+    claim('CLM-2205', { previous_risk_score: 65, risk_score: 32, risk_level: 'low', days_since_last_update: 9, latest_customer_message: 'I’m still overseas, so no rush until I’m back next week.' }),
+    [
+      event('CLM-2205', 'Customer requested hold', 'Customer advised they were travelling and asked to pause processing.'),
+      event('CLM-2205', 'Delay reaffirmed', 'Customer confirmed there was no urgency until return.'),
+    ],
   );
   assert.equal(learning?.tone, 'positive');
-  assert.equal(learning?.title, 'Customer context lowers the apparent risk');
-  assert.match(learning?.detail ?? '', /explicitly accepts the delay/);
+  assert.equal(learning?.title, 'Delay is expected and customer-approved');
+  assert.equal(learning?.changeTitle, 'Customer context reduced apparent risk');
+  assert.match(learning?.detail ?? '', /not currently a strong escalation signal/);
+  assert.match(learning?.assessmentSummary ?? '', /reduces the significance of inactivity/);
+  assert.deepEqual(learning?.evidenceSignals?.map((signal) => signal.signal), ['Long inactivity', 'Customer-requested hold', 'Delay reaffirmed']);
+  assert.equal(learning?.actionTitle, 'No immediate intervention recommended');
+  assert.match(learning?.humanReviewCopy ?? '', /claims professional remains responsible/);
 });
 
 test('intervention decisions invalidate intervention, claim-list, and claim-detail caches', () => {

@@ -1,0 +1,276 @@
+Refine the existing ClaimSignal implementation for the CLM-2205 / Mei Chen scenario.
+
+Do not change the overall visual design, Supabase schema, routing, risk values, working intervention workflow, dashboard filters, or test setup.
+
+The goal of this refinement is to make one product insight immediately obvious:
+
+A delayed claim is not automatically a risky claim.
+
+ClaimSignal should use context to distinguish genuine operational escalation from acceptable or customer-requested delay.
+
+Do not add new features.
+Do not redesign the page.
+Focus on wording, hierarchy, clarity, and product storytelling.
+
+==================================================
+1. CLM-2205 — MEI CHEN
+==================================================
+
+This is an important demo scenario.
+
+Keep the existing:
+
+- Claim ID: CLM-2205
+- Customer: Mei Chen
+- Claim type: Travel
+- Previous risk: 65
+- Current risk: 32
+- Risk level: Low
+- Direction: Decreased
+- Main signal: Delay accepted by customer
+
+Do not change these values.
+
+The intended product story is:
+
+The claim initially appeared risky because of inactivity and delay.
+
+However, the claim record shows that the customer explicitly accepted or requested the delay while travelling.
+
+That context changes the interpretation of inactivity.
+
+ClaimSignal should therefore reduce apparent escalation risk instead of blindly treating all delays as dangerous.
+
+==================================================
+2. MAKE THE RISK DECREASE THE HERO
+==================================================
+
+Make the following visually obvious:
+
+Risk 65 → 32
+
+Direction:
+
+Decreased
+
+This contrast is the core proof point.
+
+The viewer should be able to understand within a few seconds that the system did not simply accumulate risk signals.
+
+It reconsidered the meaning of the delay based on context.
+
+==================================================
+3. REFINE “WHAT CHANGED?”
+==================================================
+
+Keep the existing What Changed? structure.
+
+Use a headline such as:
+
+“Customer context reduced apparent risk”
+
+Supporting text:
+
+“The claim remains delayed, but the customer explicitly requested the pause while travelling.”
+
+Keep:
+
+Risk 65 → 32 · decreased
+
+Use a calmer green/neutral treatment rather than red or warning styling where appropriate.
+
+Do not imply that all risk has disappeared.
+
+==================================================
+4. ADD A CONTEXT CHECK
+==================================================
+
+Create or refine a context card with the headline:
+
+“Delay is expected and customer-approved”
+
+Supporting copy:
+
+“The operational timeline shows inactivity, but the customer explicitly accepted the delay until returning from travel. In this context, inactivity is not currently a strong escalation signal.”
+
+Important:
+
+Do not say:
+
+- “There is no risk”
+- “The claim is safe”
+- “The customer will not complain”
+
+Use bounded language such as:
+
+- lower apparent risk
+- reduced escalation concern
+- context changes the meaning of inactivity
+- continue monitoring
+
+==================================================
+5. AI ASSESSMENT
+==================================================
+
+Use the section title:
+
+“AI ASSESSMENT”
+
+Supporting copy:
+
+“AI assessment based on the claim event record and current operational signals.”
+
+Do not display internal implementation details such as:
+
+- mock_ai_analysis
+- raw JSON
+- database field names
+
+Preferred assessment summary:
+
+“The claim appears delayed, but the customer explicitly requested and accepted the pause while travelling. That context reduces the significance of inactivity as an escalation signal.”
+
+==================================================
+6. EVIDENCE CARDS
+==================================================
+
+The evidence should include both the apparent risk signal and the mitigating context.
+
+Suggested structure:
+
+Card 1:
+
+Long inactivity
+
+Severity:
+Low or Context-dependent
+
+Evidence:
+
+“Nine days since the last operational update.”
+
+Card 2:
+
+Customer-requested hold
+
+Severity:
+Mitigating context
+
+Evidence:
+
+“The customer asked for the claim to remain on hold while travelling.”
+
+Card 3:
+
+Delay reaffirmed
+
+Severity:
+Mitigating context
+
+Evidence:
+
+“The customer later confirmed there was no urgency until returning.”
+
+Do not invent any evidence outside the existing claim record and claim_events.
+
+==================================================
+7. CLAIM TIMELINE
+==================================================
+
+Keep the operational timeline sourced from Supabase.
+
+Highlight the relevant events:
+
+- Claim lodged
+- Customer requested hold
+- Customer reaffirmed that there was no urgency
+
+Where risk deltas are displayed, keep the existing negative contributions such as:
+
+-18 risk
+-15 risk
+
+Add the subtle explanatory label:
+
+“Prototype signal contribution”
+
+Tooltip:
+
+“These values represent transparent prototype risk rules, not trained machine-learning feature importance.”
+
+==================================================
+8. PREVENT ESCALATION / ACTION STATE
+==================================================
+
+Because this claim is Low risk and the delay is customer-approved, do not emphasize a preventative escalation CTA.
+
+Preferred state:
+
+“No immediate intervention recommended”
+
+Supporting copy:
+
+“Continue monitoring and resume processing on the agreed return date.”
+
+If an action card is shown, it should be informational rather than urgent.
+
+Suggested action:
+
+“Resume claim processing on agreed date”
+
+Urgency:
+
+This week
+
+Do not create the impression that ClaimSignal always needs to trigger action.
+
+This restraint is an important part of the product story.
+
+==================================================
+9. HUMAN REVIEW
+==================================================
+
+Keep the human-review principle visible.
+
+Preferred copy:
+
+“This is decision support. A claims professional remains responsible for deciding whether the current context still justifies the lower-risk assessment.”
+
+Do not make the AI appear authoritative or autonomous.
+
+==================================================
+10. PRESERVE FUNCTIONALITY
+==================================================
+
+Do not break or alter:
+
+- Supabase queries
+- claim_events loading
+- intervention loading
+- React Query behavior
+- dashboard filters
+- claim_type filtering
+- existing routes
+- test coverage
+- responsive behavior
+
+Do not change the curated demo risk values.
+
+==================================================
+11. DEMO SUCCESS CRITERIA
+==================================================
+
+The refinement is successful if a viewer can understand the Mei Chen scenario in approximately 10 seconds:
+
+1. The claim previously looked risky at 65.
+2. Current risk is 32.
+3. The delay still exists.
+4. The customer explicitly requested or accepted the delay.
+5. That context changes the meaning of inactivity.
+6. ClaimSignal reduces apparent escalation risk.
+7. The system does not recommend unnecessary intervention.
+8. Human review remains required.
+
+The final product insight should feel obvious:
+
+“ClaimSignal does not treat every delay as risk. Context can reduce false positives.”

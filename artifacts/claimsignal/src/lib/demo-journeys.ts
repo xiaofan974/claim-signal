@@ -21,6 +21,15 @@ export type JourneyLearning = {
   assessmentSummary?: string;
   interventionReason?: string;
   draftCustomerMessage?: string;
+  evidenceSignals?: Array<{
+    signal: string;
+    severity: string;
+    evidence: string;
+    tone: 'positive' | 'warning' | 'danger';
+  }>;
+  actionTitle?: string;
+  actionDetail?: string;
+  humanReviewCopy?: string;
 };
 
 export function getRecommendedInterventionCount(interventions?: Intervention[]) {
@@ -49,14 +58,51 @@ export function getJourneyLearning(claim: Claim, events: ClaimEvent[]): JourneyL
   const negativeSentiment = (!explicitlyNoComplaint && /(complaint|complain|unhappy|frustrat|angry|escalat|negative)/.test(source))
     || ['negative', 'deteriorating', 'frustrated'].includes((claim.sentiment ?? '').toLowerCase());
   const acceptedDelay = /(accepted|accepts|understands|understood|okay with|ok with|agreed to wait|comfortable waiting)/.test(source);
+  const requestedHold = /(requested hold|asked (?:for )?(?:the claim )?to (?:remain on hold|pause)|asked to pause|customer-requested hold)/.test(source);
+  const reaffirmedDelay = /(no urgency|until return|until returning|back next week|returning from travel)/.test(source);
   const delta = (claim.risk_score ?? 0) - (claim.previous_risk_score ?? 0);
   const noCustomerContact = (claim.customer_contact_count ?? 0) === 0;
 
-  if (delta < 0 && acceptedDelay) {
+  if (delta < 0 && (acceptedDelay || requestedHold || reaffirmedDelay)) {
+    const holdEvent = events.find((event) => /(requested hold|asked to pause|remain on hold|travelling.*pause)/i.test(`${event.event_title} ${event.event_detail}`));
+    const reaffirmedEvent = events.find((event) => /(no urgency|until return|back next week)/i.test(`${event.event_title} ${event.event_detail}`));
+    const evidenceSignals: JourneyLearning['evidenceSignals'] = [];
+    if ((claim.days_since_last_update ?? 0) > 0) {
+      const days = claim.days_since_last_update;
+      evidenceSignals.push({
+        signal: 'Long inactivity',
+        severity: 'Context-dependent',
+        evidence: `${days} ${days === 1 ? 'day' : 'days'} since the last operational update.`,
+        tone: 'positive',
+      });
+    }
+    if (holdEvent?.event_detail) {
+      evidenceSignals.push({
+        signal: 'Customer-requested hold',
+        severity: 'Mitigating context',
+        evidence: holdEvent.event_detail,
+        tone: 'positive',
+      });
+    }
+    if (reaffirmedEvent?.event_detail) {
+      evidenceSignals.push({
+        signal: 'Delay reaffirmed',
+        severity: 'Mitigating context',
+        evidence: reaffirmedEvent.event_detail,
+        tone: 'positive',
+      });
+    }
     return {
       tone: 'positive' as const,
-      title: 'Customer context lowers the apparent risk',
-      detail: 'The recorded customer response explicitly accepts the delay, so the lower score reflects context rather than operational progress alone.',
+      title: 'Delay is expected and customer-approved',
+      detail: 'The operational timeline shows inactivity, but the customer explicitly accepted the delay until returning from travel. In this context, inactivity is not currently a strong escalation signal.',
+      changeTitle: 'Customer context reduced apparent risk',
+      changeDetail: 'The claim remains delayed, but the customer explicitly requested the pause while travelling.',
+      assessmentSummary: 'The claim appears delayed, but the customer explicitly requested and accepted the pause while travelling. That context reduces the significance of inactivity as an escalation signal.',
+      evidenceSignals,
+      actionTitle: 'No immediate intervention recommended',
+      actionDetail: 'Continue monitoring and resume processing on the agreed return date.',
+      humanReviewCopy: 'This is decision support. A claims professional remains responsible for deciding whether the current context still justifies the lower-risk assessment.',
     };
   }
   if (delta > 0 && operationalDelay && !negativeSentiment && noCustomerContact) {
