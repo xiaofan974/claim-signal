@@ -6,7 +6,6 @@ import { useInterventions } from '@/hooks/use-interventions';
 import { AppShell } from '@/components/app-shell';
 import { ClaimRow } from '@/components/claim-row';
 import { DataProblem, EmptyState, PageSkeleton } from '@/components/loading-state';
-import { riskTone } from '@/components/risk-badge';
 import { DASHBOARD_KPI_LABELS, getDashboardStats, getRecommendedInterventionCount } from '@/lib/demo-journeys';
 
 export default function Dashboard() {
@@ -16,6 +15,12 @@ export default function Dashboard() {
   const { data, isLoading, isError, refetch } = useClaims({ search, risk, claimType });
   const recommendedQuery = useInterventions('recommended');
   const claims = data ?? [];
+  const hasActiveFilters = Boolean(search.trim()) || risk !== 'all' || claimType !== 'all';
+  const clearFilters = () => {
+    setSearch('');
+    setRisk('all');
+    setClaimType('all');
+  };
   const todayLabel = useMemo(() => new Intl.DateTimeFormat('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()), []);
   const stats = useMemo(() => getDashboardStats(claims), [claims]);
   return <AppShell>
@@ -34,8 +39,9 @@ export default function Dashboard() {
            <div><div className="flex items-center gap-2"><h2 className="font-semibold tracking-[-.02em]">Claims needing attention</h2><span className="rounded-full bg-muted px-2 py-0.5 mono text-[10px] text-muted-foreground">{claims.length}</span></div><p className="mt-1 text-xs text-muted-foreground">Ordered by risk, then most recent signal.</p><p className="mt-2 text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">{isLoading ? '—' : stats.callbacks}</span> missed callbacks across these open claims</p></div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative flex min-w-[220px] items-center"><Search size={15} className="absolute left-3 text-muted-foreground" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Claim, customer or handler" className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-xs outline-none ring-primary transition focus:ring-2" data-testid="input-search-claims" /></label>
-            <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5"><Filter size={14} className="text-muted-foreground" /><select value={risk} onChange={(e) => setRisk(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-risk"><option value="all">All risk</option><option value="high">High risk</option><option value="medium">Medium risk</option><option value="low">Low risk</option></select><ChevronDown size={13} className="text-muted-foreground" /></label>
+             <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5"><Filter size={14} className="text-muted-foreground" /><select value={risk} onChange={(e) => setRisk(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-risk"><option value="all">All risk</option><option value="critical">Critical risk</option><option value="high">High risk</option><option value="medium">Medium risk</option><option value="low">Low risk</option></select><ChevronDown size={13} className="text-muted-foreground" /></label>
             <label className="hidden h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5 sm:flex"><SlidersHorizontal size={14} className="text-muted-foreground" /><select value={claimType} onChange={(e) => setClaimType(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-claim-type"><option value="all">All claim types</option><option value="Motor">Motor</option><option value="Home">Home</option><option value="Travel">Travel</option></select></label>
+             {hasActiveFilters && <button type="button" onClick={clearFilters} className="h-9 rounded-md border border-border px-3 text-xs font-semibold text-primary transition-colors hover:bg-muted" data-testid="button-clear-filters">Clear filters</button>}
           </div>
         </div>
         {isLoading ? <div className="p-6"><PageSkeleton /></div> : isError ? <div className="p-6"><DataProblem onRetry={() => refetch()} /></div> : claims.length === 0 ? <div className="p-6"><EmptyState title="No claims match these filters" detail="Try clearing a filter or searching for a different claim." /></div> : <div className="relative">{claims.map((claim, index) => <ClaimRow key={claim.id} claim={claim} index={index} />)}</div>}

@@ -3,12 +3,21 @@ import type { Claim, ClaimEvent, ClaimFilters } from '@/lib/claimsignal-types';
 
 const select = '*';
 
-export async function listClaims(filters: ClaimFilters = {}) {
+export function buildClaimsQuery(filters: ClaimFilters = {}) {
   const params = new URLSearchParams({ select, order: 'risk_score.desc,updated_at.desc' });
-  if (filters.risk && filters.risk !== 'all') params.set('risk_level', `eq.${filters.risk}`);
-  if (filters.claimType && filters.claimType !== 'all') params.set('claim_type', `eq.${filters.claimType}`);
-  if (filters.search) params.set('or', `(claim_id.ilike.*${filters.search}*,customer_name.ilike.*${filters.search}*,assigned_handler.ilike.*${filters.search}*)`);
-  return supabase.list<Claim>('claims', `?${params.toString()}`);
+  const risk = filters.risk?.trim();
+  const claimType = filters.claimType?.trim();
+  const search = filters.search?.trim();
+
+  if (risk && risk !== 'all') params.set('risk_level', `eq.${risk}`);
+  if (claimType && claimType !== 'all') params.set('claim_type', `eq.${claimType}`);
+  if (search) params.set('or', `(claim_id.ilike.*${search}*,customer_name.ilike.*${search}*,assigned_handler.ilike.*${search}*)`);
+
+  return `?${params.toString()}`;
+}
+
+export async function listClaims(filters: ClaimFilters = {}) {
+  return supabase.list<Claim>('claims', buildClaimsQuery(filters));
 }
 
 export function getClaim(claimId: string) {

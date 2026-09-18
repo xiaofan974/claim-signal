@@ -2,8 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { getClaim, listClaimEvents, listClaims } from '@/services/claims';
 import type { ClaimFilters } from '@/lib/claimsignal-types';
 
-export function useClaims(filters: ClaimFilters) {
-  return useQuery({ queryKey: ['claims', filters], queryFn: () => listClaims(filters), staleTime: 30000 });
+export function normalizeClaimFilters(filters: ClaimFilters = {}): Required<ClaimFilters> {
+  return {
+    search: filters.search?.trim() ?? '',
+    risk: filters.risk?.trim() || 'all',
+    claimType: filters.claimType?.trim() || 'all',
+  };
+}
+
+export function useClaims(filters: ClaimFilters = {}) {
+  const normalizedFilters = normalizeClaimFilters(filters);
+  return useQuery({
+    queryKey: ['claims', normalizedFilters],
+    queryFn: () => listClaims(normalizedFilters),
+    staleTime: 30000,
+  });
 }
 
 export function useClaim(claimId: string) {
