@@ -1,0 +1,28 @@
+kind = "slides"
+previewPath = "/claimsignal-project-deck/"
+title = "ClaimSignal Project Overview"
+description = "A professional nine-slide product and technical overview of ClaimSignal, covering the claims-operations problem, workflow, demo claim stories, live AI architecture, deterministic risk safeguards, graceful fallback, verification, and next steps."
+version = "1.0.0"
+id = "artifacts/claimsignal-project-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/claimsignal-project-deck/" ]
+localPort = 24651
+
+[services.development]
+run = "pnpm --filter @workspace/claimsignal-project-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/claimsignal-project-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/claimsignal-project-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24651"
+BASE_PATH = "/claimsignal-project-deck/"

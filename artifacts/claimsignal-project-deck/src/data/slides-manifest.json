@@ -1,0 +1,74 @@
+[
+  {
+    "id": "d7d39d44-f3ab-40f4-860a-3aaed4d66201",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide1.tsx",
+    "title": "ClaimSignal",
+    "description": "Project overview cover",
+    "speakerNotes": ""
+  },
+  {
+    "id": "65c2b88d-095d-44f5-a1ec-9940580bd702",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide2.tsx",
+    "title": "Claims teams need earlier, clearer signals",
+    "description": "The operational problem",
+    "speakerNotes": ""
+  },
+  {
+    "id": "452a4e08-66c8-4320-b265-5583dc177403",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide3.tsx",
+    "title": "One cockpit from signal to intervention",
+    "description": "The product workflow",
+    "speakerNotes": ""
+  },
+  {
+    "id": "585d25de-6f17-4cb6-9917-e8d9d64e5204",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide4.tsx",
+    "title": "Three claims, three distinct stories",
+    "description": "Sarah, James, and Mei",
+    "speakerNotes": ""
+  },
+  {
+    "id": "b89247d7-aa31-46cc-8bf6-f17527523f05",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide5.tsx",
+    "title": "Live AI explains context—never risk",
+    "description": "Live analysis architecture",
+    "speakerNotes": ""
+  },
+  {
+    "id": "3bd9f0cd-b1a0-408a-9ba1-fb73d6b78606",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide6.tsx",
+    "title": "Deterministic risk remains authoritative",
+    "description": "Risk and validation safeguards",
+    "speakerNotes": ""
+  },
+  {
+    "id": "8fe1c585-5639-4286-835f-3f169ea88d07",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide7.tsx",
+    "title": "The assessment degrades gracefully",
+    "description": "Three-tier fallback",
+    "speakerNotes": ""
+  },
+  {
+    "id": "54bd2033-70ce-409f-88a6-558643018208",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide8.tsx",
+    "title": "Verified against the real Edge Function",
+    "description": "End-to-end verification",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f8172461-c06c-4273-9d4c-661955354509",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide9.tsx",
+    "title": "Decision support, ready for controlled use",
+    "description": "Closing and next step",
+    "speakerNotes": ""
+  }
+]
