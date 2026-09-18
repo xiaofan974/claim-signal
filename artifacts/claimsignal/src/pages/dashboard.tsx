@@ -7,6 +7,7 @@ import { AppShell } from '@/components/app-shell';
 import { ClaimRow } from '@/components/claim-row';
 import { DataProblem, EmptyState, PageSkeleton } from '@/components/loading-state';
 import { riskTone } from '@/components/risk-badge';
+import { DASHBOARD_KPI_LABELS, getDashboardStats, getRecommendedInterventionCount } from '@/lib/demo-journeys';
 
 export default function Dashboard() {
   const [search, setSearch] = useState('');
@@ -16,11 +17,7 @@ export default function Dashboard() {
   const recommendedQuery = useInterventions('recommended');
   const claims = data ?? [];
   const todayLabel = useMemo(() => new Intl.DateTimeFormat('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()), []);
-  const stats = useMemo(() => ({
-    atRisk: claims.filter((c) => ['high', 'critical'].includes(riskTone(c.risk_level))).length,
-    rising: claims.filter((c) => (c.risk_score ?? 0) > (c.previous_risk_score ?? 0)).length,
-    callbacks: claims.reduce((sum, c) => sum + (c.missed_callback_count ?? 0), 0),
-  }), [claims]);
+  const stats = useMemo(() => getDashboardStats(claims), [claims]);
   return <AppShell>
     <div className="animate-rise-in">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
@@ -28,9 +25,9 @@ export default function Dashboard() {
         <Link href="/interventions" className="inline-flex items-center gap-2 self-start rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-primary shadow-sm transition-colors hover:bg-muted sm:self-auto" data-testid="link-view-interventions">Review intervention queue <ArrowRight size={14} /></Link>
       </div>
       <div className="mt-8 grid gap-3 sm:grid-cols-3">
-         <div className="rounded-xl border border-border bg-card p-5 shadow-sm animate-rise-in animate-rise-in-delay-1" data-testid="kpi-at-risk"><div className="flex items-center justify-between"><span className="text-xs font-medium text-muted-foreground">High-risk claims</span><span className="rounded-md bg-red-50 p-1.5 text-red-700"><TriangleAlert size={16} /></span></div><div className="mt-4 flex items-end gap-2"><span className="text-[32px] font-semibold tracking-[-.05em]">{isLoading ? '—' : stats.atRisk}</span><span className="mb-1.5 text-xs text-red-700">high risk</span></div><p className="mt-1 text-[11px] text-muted-foreground">Prioritised by current risk score</p></div>
-         <div className="rounded-xl border border-border bg-card p-5 shadow-sm animate-rise-in animate-rise-in-delay-2" data-testid="kpi-rising"><div className="flex items-center justify-between"><span className="text-xs font-medium text-muted-foreground">Claims with rising risk</span><span className="rounded-md bg-amber-50 p-1.5 text-amber-700"><TrendingUp size={16} /></span></div><div className="mt-4 flex items-end gap-2"><span className="text-[32px] font-semibold tracking-[-.05em]">{isLoading ? '—' : stats.rising}</span><span className="mb-1.5 text-xs text-amber-700">signals</span></div><p className="mt-1 text-[11px] text-muted-foreground">Compared with prior assessment</p></div>
-         <div className="rounded-xl border border-border bg-card p-5 shadow-sm animate-rise-in animate-rise-in-delay-3" data-testid="kpi-interventions"><div className="flex items-center justify-between"><span className="text-xs font-medium text-muted-foreground">Interventions recommended</span><span className="rounded-md bg-[#e8eef4] p-1.5 text-primary"><span className="mono text-[12px]">↗</span></span></div><div className="mt-4 flex items-end gap-2"><span className="text-[32px] font-semibold tracking-[-.05em]">{recommendedQuery.isLoading ? '—' : recommendedQuery.data?.length ?? 0}</span><span className="mb-1.5 text-xs text-primary">to review</span></div><p className="mt-1 text-[11px] text-muted-foreground">Human approval required</p></div>
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm animate-rise-in animate-rise-in-delay-1" data-testid="kpi-at-risk"><div className="flex items-center justify-between"><span className="text-xs font-medium text-muted-foreground">{DASHBOARD_KPI_LABELS.atRisk}</span><span className="rounded-md bg-red-50 p-1.5 text-red-700"><TriangleAlert size={16} /></span></div><div className="mt-4 flex items-end gap-2"><span className="text-[32px] font-semibold tracking-[-.05em]">{isLoading ? '—' : stats.atRisk}</span><span className="mb-1.5 text-xs text-red-700">high risk</span></div><p className="mt-1 text-[11px] text-muted-foreground">Prioritised by current risk score</p></div>
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm animate-rise-in animate-rise-in-delay-2" data-testid="kpi-rising"><div className="flex items-center justify-between"><span className="text-xs font-medium text-muted-foreground">{DASHBOARD_KPI_LABELS.rising}</span><span className="rounded-md bg-amber-50 p-1.5 text-amber-700"><TrendingUp size={16} /></span></div><div className="mt-4 flex items-end gap-2"><span className="text-[32px] font-semibold tracking-[-.05em]">{isLoading ? '—' : stats.rising}</span><span className="mb-1.5 text-xs text-amber-700">signals</span></div><p className="mt-1 text-[11px] text-muted-foreground">Compared with prior assessment</p></div>
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm animate-rise-in animate-rise-in-delay-3" data-testid="kpi-interventions"><div className="flex items-center justify-between"><span className="text-xs font-medium text-muted-foreground">{DASHBOARD_KPI_LABELS.interventions}</span><span className="rounded-md bg-[#e8eef4] p-1.5 text-primary"><span className="mono text-[12px]">↗</span></span></div><div className="mt-4 flex items-end gap-2"><span className="text-[32px] font-semibold tracking-[-.05em]">{recommendedQuery.isLoading ? '—' : getRecommendedInterventionCount(recommendedQuery.data)}</span><span className="mb-1.5 text-xs text-primary">to review</span></div><p className="mt-1 text-[11px] text-muted-foreground">Human approval required</p></div>
       </div>
       <section className="mt-9 rounded-xl border border-border bg-card shadow-sm">
         <div className="flex flex-col gap-4 border-b border-border/80 p-5 lg:flex-row lg:items-center lg:justify-between lg:px-6">
