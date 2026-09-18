@@ -45,6 +45,7 @@ function makeIntervention(claimId: string): Intervention {
 function renderDashboard(claims: Claim[], interventions: Intervention[]) {
   const client = new QueryClient();
   client.setQueryData(['claims', { search: '', risk: 'all', claimType: 'all' }], claims);
+  client.setQueryData(['claim-types'], ['Home', 'Motor', 'Travel']);
   client.setQueryData(['interventions', 'recommended'], interventions);
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>

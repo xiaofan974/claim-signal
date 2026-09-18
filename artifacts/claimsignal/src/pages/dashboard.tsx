@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowRight, ChevronDown, Filter, Search, SlidersHorizontal, TrendingUp, TriangleAlert } from 'lucide-react';
 import { Link } from 'wouter';
-import { useClaims } from '@/hooks/use-claims';
+import { useClaims, useClaimTypes } from '@/hooks/use-claims';
 import { useInterventions } from '@/hooks/use-interventions';
 import { AppShell } from '@/components/app-shell';
 import { ClaimRow } from '@/components/claim-row';
@@ -13,8 +13,13 @@ export default function Dashboard() {
   const [risk, setRisk] = useState('all');
   const [claimType, setClaimType] = useState('all');
   const { data, isLoading, isError, refetch } = useClaims({ search, risk, claimType });
+  const claimTypesQuery = useClaimTypes();
   const recommendedQuery = useInterventions('recommended');
   const claims = data ?? [];
+  const claimTypes = useMemo(() => {
+    const available = claimTypesQuery.data ?? [];
+    return claimType !== 'all' && !available.includes(claimType) ? [claimType, ...available] : available;
+  }, [claimType, claimTypesQuery.data]);
   const hasActiveFilters = Boolean(search.trim()) || risk !== 'all' || claimType !== 'all';
   const clearFilters = () => {
     setSearch('');
@@ -40,7 +45,7 @@ export default function Dashboard() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative flex min-w-[220px] items-center"><Search size={15} className="absolute left-3 text-muted-foreground" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Claim, customer or handler" className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-xs outline-none ring-primary transition focus:ring-2" data-testid="input-search-claims" /></label>
              <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5"><Filter size={14} className="text-muted-foreground" /><select value={risk} onChange={(e) => setRisk(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-risk"><option value="all">All risk</option><option value="critical">Critical risk</option><option value="high">High risk</option><option value="medium">Medium risk</option><option value="low">Low risk</option></select><ChevronDown size={13} className="text-muted-foreground" /></label>
-            <label className="hidden h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5 sm:flex"><SlidersHorizontal size={14} className="text-muted-foreground" /><select value={claimType} onChange={(e) => setClaimType(e.target.value)} className="bg-transparent text-xs font-medium outline-none" data-testid="select-filter-claim-type"><option value="all">All claim types</option><option value="Motor">Motor</option><option value="Home">Home</option><option value="Travel">Travel</option></select></label>
+             <label className="hidden h-9 items-center gap-2 rounded-md border border-input bg-background px-2.5 sm:flex"><SlidersHorizontal size={14} className="text-muted-foreground" /><select value={claimType} onChange={(e) => setClaimType(e.target.value)} className="max-w-[170px] bg-transparent text-xs font-medium outline-none" data-testid="select-filter-claim-type" aria-label="Filter by claim type"><option value="all">All claim types</option>{claimTypesQuery.isLoading && <option value="" disabled>Loading claim types…</option>}{claimTypesQuery.isError && <option value="" disabled>Claim types unavailable</option>}{!claimTypesQuery.isLoading && !claimTypesQuery.isError && claimTypes.length === 0 && <option value="" disabled>No claim types found</option>}{claimTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
              {hasActiveFilters && <button type="button" onClick={clearFilters} className="h-9 rounded-md border border-border px-3 text-xs font-semibold text-primary transition-colors hover:bg-muted" data-testid="button-clear-filters">Clear filters</button>}
           </div>
         </div>

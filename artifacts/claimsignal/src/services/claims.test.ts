@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildClaimsQuery } from './claims';
+import { buildClaimsQuery, normalizeClaimTypes } from './claims';
 
 function queryValues(query: string) {
   return new URLSearchParams(query.slice(1));
@@ -42,4 +42,14 @@ test('searches claim ID, customer name, and assigned handler together', () => {
   assert.match(search, /claim_id\.ilike\.\*Amelia Tan\*/);
   assert.match(search, /customer_name\.ilike\.\*Amelia Tan\*/);
   assert.match(search, /assigned_handler\.ilike\.\*Amelia Tan\*/);
+});
+
+test('claim type options are derived, trimmed, deduplicated, and sorted from claim data', () => {
+  assert.deepEqual(normalizeClaimTypes([
+    { claim_type: 'Travel' },
+    { claim_type: ' Motor ' },
+    { claim_type: 'Cyber' },
+    { claim_type: 'Motor' },
+    { claim_type: '' },
+  ]), ['Cyber', 'Motor', 'Travel']);
 });

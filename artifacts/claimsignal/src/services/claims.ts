@@ -2,6 +2,11 @@ import { supabase } from '@/lib/supabase';
 import type { Claim, ClaimEvent, ClaimFilters } from '@/lib/claimsignal-types';
 
 const select = '*';
+const claimTypesQuery = '?select=claim_type&order=claim_type.asc';
+
+export function normalizeClaimTypes(rows: Array<Pick<Claim, 'claim_type'>>) {
+  return [...new Set(rows.map((row) => row.claim_type?.trim()).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b));
+}
 
 export function buildClaimsQuery(filters: ClaimFilters = {}) {
   const params = new URLSearchParams({ select, order: 'risk_score.desc,updated_at.desc' });
@@ -18,6 +23,11 @@ export function buildClaimsQuery(filters: ClaimFilters = {}) {
 
 export async function listClaims(filters: ClaimFilters = {}) {
   return supabase.list<Claim>('claims', buildClaimsQuery(filters));
+}
+
+export async function listClaimTypes() {
+  const rows = await supabase.list<Array<Pick<Claim, 'claim_type'>>[number]>('claims', claimTypesQuery);
+  return normalizeClaimTypes(rows);
 }
 
 export function getClaim(claimId: string) {

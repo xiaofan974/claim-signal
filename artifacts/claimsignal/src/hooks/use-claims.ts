@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getClaim, listClaimEvents, listClaims } from '@/services/claims';
+import { getClaim, listClaimEvents, listClaims, listClaimTypes } from '@/services/claims';
 import type { ClaimFilters } from '@/lib/claimsignal-types';
 
 export function normalizeClaimFilters(filters: ClaimFilters = {}): Required<ClaimFilters> {
@@ -16,6 +16,14 @@ export function useClaims(filters: ClaimFilters = {}) {
     queryKey: ['claims', normalizedFilters],
     queryFn: () => listClaims(normalizedFilters),
     staleTime: 30000,
+  });
+}
+
+export function useClaimTypes() {
+  return useQuery({
+    queryKey: ['claim-types'],
+    queryFn: listClaimTypes,
+    staleTime: 300000,
   });
 }
 

@@ -79,6 +79,7 @@ function renderDashboard(seed: (client: QueryClient) => void) {
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
   seedClaims(client, { search: '', risk: 'all', claimType: 'all' }, allClaims);
+  client.setQueryData<string[]>(['claim-types'], ['Home', 'Motor']);
   client.setQueryData<Intervention[]>(['interventions', 'recommended'], []);
   seed(client);
   render(
@@ -124,6 +125,19 @@ test('risk and claim-type selections update visible rows and queue count', async
 
   fireEvent.change(screen.getByTestId('select-filter-claim-type'), { target: { value: 'Motor' } });
   await expectQueue(1, ['Sarah Lim'], ['James Tan', 'Leila Hassan']);
+});
+
+test('a claim type introduced by the data source is available and filters the queue', async () => {
+  const cyber = makeClaim('CLM-3010', 'Priya Nair', 'Daniel Koh', 'medium', 'Cyber');
+  renderDashboard((client) => {
+    client.setQueryData<string[]>(['claim-types'], ['Cyber', 'Home', 'Motor']);
+    seedClaims(client, { search: '', risk: 'all', claimType: 'Cyber' }, [cyber]);
+  });
+
+  const claimType = screen.getByTestId('select-filter-claim-type') as HTMLSelectElement;
+  assert.ok([...claimType.options].some((option) => option.value === 'Cyber'));
+  fireEvent.change(claimType, { target: { value: 'Cyber' } });
+  await expectQueue(1, ['Priya Nair'], ['Sarah Lim', 'James Tan', 'Leila Hassan']);
 });
 
 test('clearing an empty result restores the original queue', async () => {
