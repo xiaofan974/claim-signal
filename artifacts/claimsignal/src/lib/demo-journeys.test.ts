@@ -91,7 +91,7 @@ test('CLM-2205 identifies accepted delay and falling risk', () => {
   assert.match(learning?.detail ?? '', /explicitly accepts the delay/);
 });
 
-test('approval invalidates intervention, claim-list, and claim-detail caches', () => {
+test('intervention decisions invalidate intervention, claim-list, and claim-detail caches', () => {
   const invalidated: string[][] = [];
   invalidateInterventionCaches(({ queryKey }) => invalidated.push(queryKey), 'CLM-1847');
   assert.deepEqual(invalidated, [['interventions'], ['claims'], ['claim', 'CLM-1847']]);

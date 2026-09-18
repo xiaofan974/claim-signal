@@ -27,3 +27,32 @@ test('approval schedules and timestamps the intervention before updating the cla
     ['claim', 'CLM-1847', 'scheduled'],
   ]);
 });
+
+test('dismissal preserves the intervention audit record without approval metadata or draft changes', async () => {
+  const calls: unknown[] = [];
+  await saveInterventionDecision(
+    {
+      id: 'intervention-1',
+      claimId: 'CLM-1847',
+      status: 'dismissed',
+      customerMessage: 'This edited draft must not be saved on dismissal',
+    },
+    {
+      now: () => {
+        throw new Error('Dismissal must not set approved_at');
+      },
+      updateIntervention: async (id, body) => {
+        calls.push(['intervention', id, body]);
+        return {} as never;
+      },
+      updateClaimInterventionStatus: async (claimId, status) => {
+        calls.push(['claim', claimId, status]);
+        return {} as never;
+      },
+    },
+  );
+  assert.deepEqual(calls, [
+    ['intervention', 'intervention-1', { status: 'dismissed' }],
+    ['claim', 'CLM-1847', 'dismissed'],
+  ]);
+});
