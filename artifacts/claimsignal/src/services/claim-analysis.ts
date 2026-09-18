@@ -1,3 +1,5 @@
+import { claimAnalysisSchema, type ClaimAnalysis } from '@/lib/claimsignal-types';
+
 export function parseClaimAnalysis(
   raw: unknown,
 ): ClaimAnalysis | null {
