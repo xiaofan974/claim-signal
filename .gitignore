@@ -1,15 +1,26 @@
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
 # compiled output
-dist
-tmp
-out-tsc
+dist/
+tmp/
+out-tsc/
 *.tsbuildinfo
 .expo
 .expo-shared
 
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Private keys / certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
 # dependencies
-node_modules
+node_modules/
 
 # IDEs and editors
 /.idea
@@ -30,7 +41,7 @@ node_modules
 # misc
 /.sass-cache
 /connect.lock
-/coverage
+/coverage/
 /libpeerconnection.log
 npm-debug.log
 yarn-error.log
@@ -47,3 +58,18 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Build output
+build/
+.next/
+
+# Tool caches
+.vite/
+.turbo/
+
+# Test output
+test-results/
+playwright-report/
+
+# Generated QA screenshots
+screenshots/
