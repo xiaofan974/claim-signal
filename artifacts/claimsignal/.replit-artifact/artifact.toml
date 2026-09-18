@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "ClaimSignal"
+description = "A responsive claims operations cockpit that surfaces emerging complaint risk, explains what changed, and helps teams schedule human-reviewed preventative interventions."
+version = "1.0.0"
+id = "artifacts/claimsignal"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20030
+
+[services.development]
+run = "pnpm --filter @workspace/claimsignal run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/claimsignal", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/claimsignal/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20030"
+BASE_PATH = "/"

@@ -1,0 +1,1419 @@
+Build a polished, responsive B2B web application called **ClaimSignal**.
+
+ClaimSignal is an AI-powered early-warning system for insurance claims operations.
+
+Its purpose is to help claims teams identify open claims that are at risk of escalating into customer complaints or poor customer outcomes, understand why the risk is increasing, and take preventative action before escalation occurs.
+
+This is a portfolio prototype designed to demonstrate AI-native product thinking in insurance, risk, compliance, and claims.
+
+The key product idea is:
+
+**Know which claims are going wrong before your customers have to tell you.**
+
+The core user question is:
+
+**“Which claims need attention today, why, and what should we do next?”**
+
+---
+
+# 1. PRODUCT PRINCIPLE
+
+Traditional claims systems primarily record what has already happened.
+
+ClaimSignal demonstrates a more proactive workflow:
+
+Claim evolves
+→ operational friction appears
+→ risk increases
+→ system identifies signals
+→ AI explains the context
+→ preventative intervention is recommended
+→ human reviews the recommendation
+→ intervention is approved
+→ outcome can eventually be measured
+
+The application must feel like credible software used by insurance operations teams.
+
+Do NOT build:
+
+* A generic AI chatbot
+* A full claims-management system
+* A static dashboard
+* An autonomous claim decision-maker
+
+Prioritize one excellent workflow:
+
+**Dashboard → risky claim → what changed → why → preventative intervention**
+
+---
+
+# 2. TECH STACK
+
+Use:
+
+* React
+* TypeScript
+* Vite
+* Tailwind CSS
+* shadcn/ui
+* React Router
+* TanStack React Query
+* Zod
+* date-fns
+* Lucide React icons
+* Supabase JavaScript client
+
+Use Supabase as the live backend.
+
+Do not use local hard-coded claim fixtures except as an explicit development fallback.
+
+All production/demo claim data must come from Supabase.
+
+---
+
+# 3. SUPABASE CONFIGURATION
+
+Use environment variables.
+
+Create:
+
+```text
+VITE_SUPABASE_URL=https://brmecokqbtrqvxyqgeit.supabase.co
+
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_N4qIHyYfsxOyxvWZSkY2GQ_qs2-zWqB
+```
+
+Do NOT use a Supabase service-role key in the frontend.
+
+Do NOT add a service-role key to any `VITE_` environment variable.
+
+Create one Supabase client:
+
+```text
+src/lib/supabase.ts
+```
+
+Example responsibility:
+
+```text
+createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+)
+```
+
+All database access must go through dedicated service modules.
+
+React visual components should NOT directly contain Supabase query logic.
+
+Suggested structure:
+
+```text
+src/
+  lib/
+    supabase.ts
+
+  services/
+    claimsService.ts
+    interventionsService.ts
+    riskEngine.ts
+    claimAnalysis.ts
+
+  hooks/
+    useClaims.ts
+    useClaim.ts
+    useClaimEvents.ts
+    useInterventions.ts
+
+  components/
+  pages/
+  types/
+```
+
+---
+
+# 4. EXISTING SUPABASE DATA MODEL
+
+The Supabase project already contains three populated tables.
+
+Do NOT recreate them.
+
+Do NOT delete or replace existing seed data.
+
+## public.claims
+
+Important columns:
+
+```text
+id
+claim_id
+customer_name
+claim_type
+lodgement_date
+current_status
+assigned_handler
+claim_amount_sgd
+
+days_open
+days_since_last_update
+customer_contact_count
+missed_callback_count
+missed_sla_count
+documents_outstanding
+assessment_pending
+
+sentiment
+latest_customer_message
+
+previous_risk_score
+risk_score
+risk_level
+main_signal
+
+predicted_issue
+recommended_action
+context_note
+mock_ai_analysis
+
+intervention_status
+
+created_at
+updated_at
+```
+
+Claim types:
+
+```text
+Motor
+Home
+Travel
+```
+
+Risk levels:
+
+```text
+Low
+Medium
+High
+```
+
+---
+
+## public.claim_events
+
+Columns:
+
+```text
+id
+claim_id
+event_date
+event_type
+event_title
+event_detail
+risk_delta
+created_at
+```
+
+Use this table for:
+
+* Claim timeline
+* “What changed?”
+* Risk evolution explanations
+
+Relationship:
+
+```text
+claim_events.claim_id
+→
+claims.claim_id
+```
+
+---
+
+## public.interventions
+
+Columns:
+
+```text
+id
+claim_id
+action_type
+recommended_action
+owner
+urgency
+due_date
+reason
+customer_message
+status
+approved_at
+created_at
+updated_at
+```
+
+Possible urgency values:
+
+```text
+today
+24_hours
+this_week
+```
+
+Possible statuses:
+
+```text
+recommended
+scheduled
+completed
+dismissed
+```
+
+Use this table for the Prevent Escalation workflow.
+
+---
+
+# 5. EXISTING DATA
+
+The database already contains:
+
+* 30 synthetic claims
+* 46 claim events
+* 9 intervention recommendations
+
+Risk distribution is approximately:
+
+```text
+High: 7
+Medium: 8
+Low: 15
+```
+
+Do not fabricate different totals.
+
+Calculate dashboard totals from Supabase dynamically.
+
+---
+
+# 6. IMPORTANT DEMO CLAIMS
+
+Several claims were deliberately authored for the main demo.
+
+## CLM-1847 — Sarah Lim
+
+This is the PRIMARY demo claim.
+
+Type:
+
+Motor
+
+Risk:
+
+```text
+Previous: 42
+Current: 78
+Risk level: High
+```
+
+Main signal:
+
+```text
+Repeated contacts + missed callbacks
+```
+
+The claim timeline includes:
+
+* Claim lodged
+* Repair assessment requested
+* Customer requested update
+* Callback promised
+* Promised callback missed
+* Customer followed up again
+
+The product should clearly communicate:
+
+**Risk increased from 42 → 78**
+
+Recommended action:
+
+**Contact the customer today with a concrete status update and revised assessment date.**
+
+---
+
+## CLM-0914 — James Tan
+
+Important product-learning scenario.
+
+Risk:
+
+```text
+61 — Medium
+```
+
+The customer has NOT yet complained.
+
+The system identifies:
+
+* Missed operational milestone
+* External assessor delay
+* No recent progress
+
+This case demonstrates:
+
+**Operational problems can be detected before customer frustration becomes explicit.**
+
+---
+
+## CLM-2077 — Priya Nair
+
+Risk:
+
+```text
+55 — Medium
+```
+
+The delay itself is moderate.
+
+The main signals are:
+
+* Repeated customer contacts
+* Deteriorating sentiment
+
+This demonstrates that raw delay alone should not determine risk.
+
+---
+
+## CLM-1832 — Daniel Wong
+
+Risk:
+
+```text
+12 — Low
+```
+
+Healthy claim progression.
+
+No intervention should be suggested.
+
+Use this claim to demonstrate that ClaimSignal does not label everything dangerous.
+
+---
+
+## CLM-2205 — Mei Chen
+
+Important contextual reasoning scenario.
+
+Risk:
+
+```text
+Previous: 65
+Current: 32
+```
+
+The claim appears delayed.
+
+However, the customer explicitly accepted/requested the delay because they were travelling.
+
+This should be presented as an example where:
+
+**Context reduces apparent risk.**
+
+This is strategically important to the product story.
+
+---
+
+# 7. APPLICATION DESIGN
+
+Design the product as premium B2B operational software.
+
+Visual direction:
+
+* Professional
+* Calm
+* Trustworthy
+* Dense enough for operational use
+* Minimal
+* Modern
+* Insurance/risk appropriate
+
+Use:
+
+* Warm off-white or light gray background
+* White cards
+* Dark slate navigation
+* Deep blue primary accent
+* Red for high risk
+* Amber for medium risk
+* Green for low risk
+* Neutral grays
+* Inter or comparable sans-serif font
+* Subtle borders
+* Minimal shadows
+
+Avoid:
+
+* Neon gradients
+* Glassmorphism
+* Robot illustrations
+* Excessive sparkles
+* Consumer-app visual language
+* Overly playful AI branding
+
+It should feel closer to:
+
+**modern operations SaaS**
+
+than:
+
+**AI demo website**
+
+---
+
+# 8. MAIN APPLICATION LAYOUT
+
+Use a desktop-first application shell.
+
+Primary target:
+
+```text
+1440 × 900
+```
+
+Include a left sidebar.
+
+Navigation:
+
+```text
+ClaimSignal
+
+Overview
+Claims
+Interventions
+
+────────
+
+How it works
+```
+
+The dashboard should be the default page.
+
+No authentication flow is required.
+
+---
+
+# 9. DASHBOARD
+
+Main heading:
+
+**Claims needing attention**
+
+Subtitle:
+
+**Prioritized by emerging complaint and customer-outcome risk.**
+
+At the top, show KPI cards calculated from the database.
+
+Suggested cards:
+
+```text
+30
+Open claims
+
+7
+High risk
+
+9
+Interventions recommended
+
+X
+Average risk score
+```
+
+Do not hard-code these values.
+
+Query them from Supabase.
+
+---
+
+# 10. CLAIMS TABLE
+
+Query:
+
+```text
+public.claims
+```
+
+Default ordering:
+
+```text
+risk_score descending
+```
+
+Columns:
+
+```text
+Claim
+Customer
+Type
+Status
+Days open
+Risk
+Main signal
+Assigned handler
+Intervention
+```
+
+Example risk cell:
+
+```text
+78
+High
+```
+
+Use both:
+
+* Color
+* Text
+
+Do not communicate risk using color alone.
+
+---
+
+# 11. FILTERS
+
+Provide:
+
+Risk:
+
+```text
+All
+High
+Medium
+Low
+```
+
+Claim type:
+
+```text
+All
+Motor
+Home
+Travel
+```
+
+Search:
+
+```text
+Claim ID
+Customer name
+Assigned handler
+```
+
+Filtering can happen client-side for this dataset or through Supabase queries.
+
+Use debounced search if querying Supabase.
+
+---
+
+# 12. CLAIM DETAIL PAGE
+
+Route:
+
+```text
+/claims/:claimId
+```
+
+Query the matching row from:
+
+```text
+claims
+```
+
+Also query:
+
+```text
+claim_events
+```
+
+where:
+
+```text
+claim_events.claim_id = claims.claim_id
+```
+
+Sort timeline ascending by event date.
+
+Query interventions matching the claim.
+
+---
+
+# 13. CLAIM HEADER
+
+Show:
+
+```text
+CLM-1847
+Sarah Lim
+
+Motor claim
+SGD 12,800
+
+Assigned:
+Amelia Tan
+
+Status:
+Awaiting repair assessment
+
+Open:
+24 days
+```
+
+Prominently display:
+
+## Complaint escalation risk
+
+Example:
+
+```text
+78
+HIGH
+```
+
+Underneath:
+
+```text
+↑ Increased from 42
+```
+
+If risk decreased:
+
+```text
+↓ Decreased from 65
+```
+
+---
+
+# 14. “WHAT CHANGED?” FEATURE
+
+This is a critical demo interaction.
+
+Provide button:
+
+**What changed?**
+
+Clicking opens a drawer or panel.
+
+For CLM-1847 show:
+
+## Risk increased
+
+**42 → 78**
+
+Then derive relevant events from `claim_events`.
+
+Highlight events with positive `risk_delta`.
+
+Example:
+
+```text
++ Customer follow-up received
++ Promised callback missed
++ Assessment delay continued
++ Additional days without meaningful progress
+```
+
+Whenever available, show each event's contribution.
+
+Example:
+
+```text
+Missed callback         +10
+Customer follow-up      +11
+```
+
+Do not imply that these values represent trained ML feature importance.
+
+They are transparent prototype risk signals.
+
+---
+
+# 15. TIMELINE
+
+Create a clean vertical timeline.
+
+For Sarah:
+
+```text
+Aug 25
+Claim lodged
+
+Sep 03
+Repair assessment requested
+
+Sep 08
+Customer requested update
+
+Sep 11
+Callback promised
+
+Sep 12
+Promised callback not completed
+
+Sep 15
+Customer followed up again
+```
+
+Display:
+
+* Date
+* Event
+* Supporting detail
+* Risk impact when relevant
+
+Visually emphasize negative operational events.
+
+---
+
+# 16. WHY THIS CLAIM NEEDS ATTENTION
+
+Read:
+
+```text
+mock_ai_analysis
+```
+
+from the claim record.
+
+This field contains structured JSON for key demo claims.
+
+Render:
+
+### AI assessment
+
+Summary.
+
+Then:
+
+### Signals
+
+Each signal card shows:
+
+```text
+Signal name
+Severity
+Evidence
+```
+
+Example:
+
+**Repeated customer contact**
+
+High severity
+
+> Three customer contacts in seven days.
+
+---
+
+# 17. MOCK AI MODE
+
+For V1, use `mock_ai_analysis` from Supabase instead of making a live LLM request.
+
+This is intentional.
+
+The UI should therefore work completely before live AI is integrated.
+
+For claims where `mock_ai_analysis` is populated:
+
+Use that structured analysis.
+
+For claims where it is empty:
+
+Generate a deterministic fallback explanation using fields such as:
+
+```text
+risk_score
+main_signal
+predicted_issue
+recommended_action
+```
+
+Do NOT invent unsupported evidence.
+
+Display a small development indicator somewhere unobtrusive:
+
+```text
+Demo AI analysis
+```
+
+Do not make it visually dominant.
+
+---
+
+# 18. AI ANALYSIS TYPE
+
+Create a TypeScript/Zod structure approximately equivalent to:
+
+```text
+ClaimAnalysis {
+  predicted_issue: string | null
+
+  summary: string
+
+  signals: Array<{
+    signal: string
+    severity: "low" | "medium" | "high"
+    evidence: string
+  }>
+
+  recommended_action: {
+    action: string
+    urgency: "today" | "24_hours" | "this_week"
+    owner: string
+    reason: string
+  }
+
+  draft_customer_message: string | null
+}
+```
+
+Parse `mock_ai_analysis` defensively.
+
+If malformed:
+
+Fall back gracefully.
+
+Do not crash the claim page.
+
+---
+
+# 19. PREVENT ESCALATION
+
+Provide a prominent CTA:
+
+**Prevent escalation**
+
+Only emphasize this action for Medium or High risk claims.
+
+Low-risk claims can instead show:
+
+```text
+No intervention currently recommended
+```
+
+Clicking Prevent Escalation opens an Intervention drawer.
+
+---
+
+# 20. INTERVENTION DRAWER
+
+Query existing intervention data where available.
+
+Show:
+
+### Recommended action
+
+Example:
+
+```text
+Send proactive claim update
+```
+
+### Urgency
+
+```text
+Today
+```
+
+### Owner
+
+```text
+Amelia Tan
+```
+
+### Why
+
+Explain the intervention rationale.
+
+### Customer message
+
+Display an editable textarea containing the suggested customer communication.
+
+Example:
+
+```text
+Hi Sarah,
+
+I’m contacting you with an update on your motor claim...
+```
+
+Label clearly:
+
+**Suggested draft — review before sending**
+
+---
+
+# 21. HUMAN-IN-THE-LOOP CONTROL
+
+The AI must NEVER appear to autonomously send communication or make claim decisions.
+
+Buttons:
+
+```text
+Approve intervention
+Edit
+Dismiss
+```
+
+When approving:
+
+Update the matching `interventions` row:
+
+```text
+status = scheduled
+approved_at = current timestamp
+```
+
+Then update local UI.
+
+Show:
+
+**Intervention scheduled**
+
+Include:
+
+```text
+Owner
+Action
+Due date
+```
+
+Do NOT actually send an email.
+
+Do NOT actually contact the customer.
+
+---
+
+# 22. UPDATE CLAIM INTERVENTION STATUS
+
+After approving an intervention, update:
+
+```text
+claims.intervention_status
+```
+
+to:
+
+```text
+scheduled
+```
+
+This means the dashboard should immediately reflect that intervention status after React Query cache invalidation.
+
+Example:
+
+Before:
+
+```text
+Recommended
+```
+
+After:
+
+```text
+Scheduled
+```
+
+---
+
+# 23. DISMISS INTERVENTION
+
+If the user clicks:
+
+**Dismiss**
+
+Update intervention:
+
+```text
+status = dismissed
+```
+
+and claim:
+
+```text
+intervention_status = dismissed
+```
+
+Ask for confirmation before dismissing.
+
+Do not delete the intervention record.
+
+Preserve it as an audit trail.
+
+---
+
+# 24. INTERVENTIONS PAGE
+
+Create:
+
+```text
+/interventions
+```
+
+Show recommended and scheduled interventions.
+
+Columns:
+
+```text
+Claim
+Customer
+Action
+Owner
+Urgency
+Due date
+Status
+```
+
+Allow filters:
+
+```text
+Recommended
+Scheduled
+Completed
+Dismissed
+```
+
+This page is secondary to the main claims workflow.
+
+Do not spend excessive development time on it.
+
+---
+
+# 25. HOW CLAIMSIGNAL WORKS
+
+Create a small informational page or drawer.
+
+Title:
+
+**How ClaimSignal works**
+
+Explain the prototype architecture:
+
+### 1. Detect
+
+Operational claim signals are monitored.
+
+Examples:
+
+* Delays
+* Missed SLAs
+* Missed callbacks
+* Repeated contacts
+* Outstanding assessments
+* Customer sentiment
+
+### 2. Prioritize
+
+A transparent rules-based scoring model prioritizes claims.
+
+### 3. Understand
+
+AI interprets the context behind those signals.
+
+### 4. Intervene
+
+The system proposes the smallest practical preventative action.
+
+### 5. Learn
+
+A future system would measure which interventions actually reduce escalation.
+
+Include:
+
+**For this prototype, risk scores use transparent heuristics rather than a trained predictive model.**
+
+This sentence must be visible.
+
+Do NOT falsely claim predictive ML accuracy.
+
+---
+
+# 26. PRODUCT METRICS
+
+Add:
+
+**What we'd measure in production**
+
+Show:
+
+```text
+Preventable complaints per 1,000 claims
+
+% high-risk claims receiving intervention
+
+Median time from risk signal → intervention
+
+Complaint rate after intervention
+```
+
+Label these:
+
+**Proposed product metrics**
+
+Do not show fabricated results.
+
+---
+
+# 27. FUTURE PRODUCT LOOP
+
+Visualize:
+
+```text
+Claim evolves
+      ↓
+Risk detected
+      ↓
+Intervention recommended
+      ↓
+Human approves action
+      ↓
+Outcome observed
+      ↓
+System learns
+```
+
+The future product vision is not simply:
+
+“better risk prediction.”
+
+It is:
+
+**learning which interventions actually prevent poor outcomes.**
+
+---
+
+# 28. RISK ENGINE SERVICE
+
+Create:
+
+```text
+src/services/riskEngine.ts
+```
+
+Document the prototype rules.
+
+Example contributors:
+
+```text
+Missed SLA                      +20
+>7 days without meaningful update +15
+>2 customer contacts            +15
+Missed callback                 +10
+Assessment overdue              +10
+Negative sentiment              +10
+Blocking documents              +10
+```
+
+Do NOT automatically overwrite existing seeded `risk_score` values yet.
+
+The seeded values are deliberately authored for demo consistency.
+
+Instead create:
+
+```text
+calculatePrototypeRisk(claim)
+```
+
+and make it available for debugging or future use.
+
+This allows the case study to explain the scoring logic without accidentally changing the curated demo dataset.
+
+---
+
+# 29. SUPABASE SERVICE METHODS
+
+Create methods similar to:
+
+```text
+getClaims()
+getClaimById()
+getClaimEvents()
+getClaimInterventions()
+approveIntervention()
+dismissIntervention()
+updateClaimInterventionStatus()
+```
+
+Use React Query.
+
+Recommended query keys:
+
+```text
+["claims"]
+
+["claim", claimId]
+
+["claim-events", claimId]
+
+["interventions"]
+
+["interventions", claimId]
+```
+
+After mutation:
+
+Invalidate relevant query keys.
+
+---
+
+# 30. ERROR HANDLING
+
+Implement useful states for:
+
+* Supabase unavailable
+* Claim not found
+* No timeline events
+* No intervention recommendation
+* Intervention update failed
+* Malformed mock AI JSON
+
+Examples:
+
+Instead of:
+
+```text
+PostgREST error
+```
+
+show:
+
+```text
+We couldn't load this claim right now.
+```
+
+Instead of silently failing intervention approval:
+
+```text
+The intervention could not be updated. Nothing was sent or changed.
+```
+
+---
+
+# 31. LOADING STATES
+
+Use:
+
+* Table skeletons
+* Claim-page skeleton
+* Timeline skeleton
+* Intervention drawer loading state
+
+Do not show full-screen spinners for simple table refreshes.
+
+---
+
+# 32. RESPONSIVE DESIGN
+
+Desktop is primary.
+
+Support tablets.
+
+For narrow screens:
+
+Convert table rows into stacked claim cards.
+
+No horizontal scrolling should be required for the main workflow.
+
+---
+
+# 33. OUT OF SCOPE
+
+Do NOT implement:
+
+* Authentication
+* User management
+* Real insurer integrations
+* Claim payments
+* Automatic claim approvals
+* Automatic claim rejection
+* Underwriting
+* Email delivery
+* SMS
+* Full workflow automation
+* Regulatory breach determination
+* Machine-learning model training
+* Advanced RAG
+* Customer portal
+* Customer authentication
+* Multiple insurers
+* Multi-tenancy
+* Large analytics suite
+
+Do not allow scope creep.
+
+---
+
+# 34. SECURITY / PROTOTYPE NOTE
+
+The current Supabase policies are intentionally permissive because this is a portfolio prototype with synthetic data and no authentication.
+
+Add a README note:
+
+**Prototype security model**
+
+“This demo uses synthetic claim data and anonymous Supabase access to remove authentication friction from the portfolio experience. A production implementation would require authenticated users, organization-level access controls, least-privilege RLS policies, audit logging and appropriate handling of regulated customer information.”
+
+Do not represent the current access model as production-ready.
+
+---
+
+# 35. README
+
+Create a README containing:
+
+## Product
+
+What ClaimSignal does.
+
+## Problem
+
+Claims systems often react after customer friction has already become a complaint.
+
+## Hypothesis
+
+Operational precursors to complaints may be detectable earlier.
+
+## Product bet
+
+Identify deteriorating claim journeys and recommend preventative intervention.
+
+## Architecture
+
+```text
+React
+  ↓
+Service layer
+  ↓
+Supabase
+
+claims
+claim_events
+interventions
+```
+
+For V1:
+
+```text
+Supabase mock AI analysis
+→ structured UX
+```
+
+Future:
+
+```text
+Supabase
+→ AI analysis service
+→ structured output
+→ human intervention workflow
+```
+
+## Important design decision
+
+Exp
