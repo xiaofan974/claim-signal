@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildClaimsQuery, normalizeClaimTypes } from './claims';
+import { buildClaimsQuery, listClaimTypes, normalizeClaimTypes } from './claims';
 
 function queryValues(query: string) {
   return new URLSearchParams(query.slice(1));
@@ -44,7 +44,7 @@ test('searches claim ID, customer name, and assigned handler together', () => {
   assert.match(search, /assigned_handler\.ilike\.\*Amelia Tan\*/);
 });
 
-test('claim type options are derived, trimmed, deduplicated, and sorted from claim data', () => {
+test('claim type options are trimmed, deduplicated, and sorted', () => {
   assert.deepEqual(normalizeClaimTypes([
     { claim_type: 'Travel' },
     { claim_type: ' Motor ' },
@@ -52,4 +52,8 @@ test('claim type options are derived, trimmed, deduplicated, and sorted from cla
     { claim_type: 'Motor' },
     { claim_type: '' },
   ]), ['Cyber', 'Motor', 'Travel']);
+});
+
+test('lists one value per available claim type from the maintained catalogue', async () => {
+  assert.deepEqual(await listClaimTypes(), ['Cyber', 'Home', 'Motor', 'Travel']);
 });
