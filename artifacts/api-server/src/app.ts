@@ -6,6 +6,10 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// The API is served behind Replit's proxy in deployed environments. Trusting
+// one proxy hop lets route-level protections use the originating client IP.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
