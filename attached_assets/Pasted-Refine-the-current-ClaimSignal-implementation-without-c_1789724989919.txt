@@ -1,0 +1,53 @@
+Refine the current ClaimSignal implementation without changing the overall visual language.
+
+Fix the desktop sidebar so that it uses a stable width of approximately 300 px, never overlaps page content, and properly spaces the logo, navigation items, system status card, and user identity block. When the sidebar is open, navigation labels must never collide or wrap awkwardly.
+
+Update the KPI cards to prioritize business-actionable metrics:
+
+High-risk claims
+Claims with rising risk
+Interventions recommended
+
+Keep missed callbacks available as a secondary operational metric elsewhere.
+
+Make each claim row fully clickable with a clear hover/focus state. The trailing arrow should be secondary, not the only obvious affordance.
+
+Build and polish the Claim Detail screen for CLM-1847 as the primary demo journey. The page must clearly show:
+
+Current risk score: 78 High
+Previous risk score: 42
+Risk direction: increased
+“What changed?” interaction
+Claim timeline
+Structured AI assessment
+Key evidence/signals
+Recommended preventative intervention
+Prominent “Prevent escalation” CTA
+
+The “What changed?” interaction must use claim_events from Supabase and clearly distinguish operational events from AI interpretation.
+
+The AI assessment section should render structured data from mock_ai_analysis. Do not generate arbitrary prose.
+
+Build a polished intervention drawer showing:
+
+Recommended action
+Urgency
+Owner
+Reason
+Editable draft customer message
+Approve intervention
+Dismiss
+
+On approval, update the intervention row in Supabase to scheduled, set approved_at, update claims.intervention_status to scheduled, and invalidate the relevant React Query caches so the dashboard reflects the change immediately.
+
+Also verify these two product-learning scenarios:
+
+CLM-0914 — James Tan:
+Show that risk can be Medium/61 even though the customer has not yet complained. Clearly communicate that operational delay can emerge before negative sentiment.
+
+CLM-2205 — Mei Chen:
+Show the risk decreasing from 65 to 32 because the customer explicitly accepted the delay. Clearly communicate that context can lower apparent risk.
+
+Preserve the existing overall aesthetic and information density.
+
+Do not add new features until these three demo journeys are polished and reliable.

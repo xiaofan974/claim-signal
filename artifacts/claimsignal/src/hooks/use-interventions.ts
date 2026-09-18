@@ -10,7 +10,7 @@ export function useUpdateIntervention() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, claimId, status, customerMessage }: { id: string; claimId: string; status: 'scheduled' | 'dismissed'; customerMessage?: string }) => {
-      await updateIntervention(id, { status, ...(status === 'scheduled' ? { approved_at: new Date().toISOString() } : {}), ...(customerMessage ? { customer_message: customerMessage } : {}) });
+      await updateIntervention(id, { status, ...(status === 'scheduled' ? { approved_at: new Date().toISOString() } : {}), ...(status === 'scheduled' && customerMessage !== undefined ? { customer_message: customerMessage } : {}) });
       await updateClaimInterventionStatus(claimId, status);
     },
     onSuccess: (_data, variables) => {

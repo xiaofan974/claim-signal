@@ -14,7 +14,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="min-h-[100dvh] bg-background">
-      <aside className={cn('fixed inset-y-0 left-0 z-40 flex w-[254px] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-200 lg:translate-x-0', open ? 'translate-x-0' : '-translate-x-full')}>
+      <aside className={cn('fixed inset-y-0 left-0 z-40 flex w-[300px] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-200 lg:translate-x-0', open ? 'translate-x-0' : '-translate-x-full')}>
         <div className="flex h-[82px] items-center justify-between border-b border-sidebar-border px-7">
           <Link href="/" className="flex items-center gap-3" data-testid="link-brand">
             <span className="grid size-9 place-items-center rounded-[11px] bg-sidebar-primary text-sidebar-primary-foreground">
@@ -32,9 +32,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="space-y-1">
             {navItems.map(({ href, label, icon: Icon }) => {
               const active = href === '/' ? location === '/' : location.startsWith(href);
-              return <Link key={href} href={href} onClick={() => setOpen(false)} className={cn('group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors', active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground')} data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}>
-                <Icon size={17} className={active ? 'text-sidebar-primary' : 'text-sidebar-foreground/45'} />
-                <span>{label}</span>
+              return <Link key={href} href={href} onClick={() => setOpen(false)} className={cn('group flex min-w-0 items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors', active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground')} data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}>
+                <Icon size={17} className={cn('shrink-0', active ? 'text-sidebar-primary' : 'text-sidebar-foreground/45')} />
+                <span className="min-w-0 truncate">{label}</span>
                 {active && <ChevronRight size={14} className="ml-auto text-sidebar-primary" />}
               </Link>;
             })}
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       {open && <button type="button" aria-label="Close navigation" onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" data-testid="button-overlay" />}
-      <main className="min-h-[100dvh] lg:pl-[254px]">
+      <main className="min-h-[100dvh] min-w-0 lg:pl-[300px]">
         <header className="sticky top-0 z-20 flex h-[70px] items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur-md sm:px-8 lg:px-10">
           <div className="flex items-center gap-3">
             <button type="button" className="rounded-md p-2 text-muted-foreground hover:bg-muted lg:hidden" onClick={() => setOpen(true)} data-testid="button-open-menu" aria-label="Open menu"><Menu size={20} /></button>
