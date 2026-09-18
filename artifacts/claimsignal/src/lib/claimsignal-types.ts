@@ -62,24 +62,50 @@ export interface Intervention {
   claim?: Pick<Claim, 'claim_id' | 'customer_name' | 'claim_type' | 'risk_level' | 'risk_score'>;
 }
 
+const claimAnalysisSignalSchema = z.object({
+  signal: z.string(),
+  severity: z.enum(['low', 'medium', 'high']),
+  evidence: z.string(),
+}).strict();
+
+const contextAdjustmentSchema = z.object({
+  factor: z.string(),
+  effect: z.enum(['increases_concern', 'reduces_concern', 'neutral']),
+  evidence: z.string(),
+}).strict();
+
+const recommendedActionSchema = z.object({
+  action: z.string(),
+  urgency: z.enum(['today', '24_hours', 'this_week', 'none']),
+  owner: z.string(),
+  reason: z.string(),
+}).strict();
+
 export const claimAnalysisSchema = z.object({
   predicted_issue: z.string().nullable().optional(),
   summary: z.string(),
-  signals: z.array(z.object({
-    signal: z.string(),
-    severity: z.enum(['low', 'medium', 'high']),
-    evidence: z.string(),
-  })).default([]),
-  recommended_action: z.object({
-    action: z.string(),
-    urgency: z.enum(['today', '24_hours', 'this_week']),
-    owner: z.string(),
-    reason: z.string(),
-  }).nullable().optional(),
+  signals: z.array(claimAnalysisSignalSchema).default([]),
+  context_adjustments: z.array(contextAdjustmentSchema).default([]),
+  recommended_action: recommendedActionSchema.nullable().optional(),
   draft_customer_message: z.string().nullable().optional(),
 });
 
 export type ClaimAnalysis = z.infer<typeof claimAnalysisSchema>;
+
+export const liveClaimAnalysisResponseSchema = z.object({
+  source: z.literal('live_ai'),
+  claim_id: z.string().min(1),
+  analysis: z.object({
+    predicted_issue: z.string().nullable(),
+    summary: z.string(),
+    signals: z.array(claimAnalysisSignalSchema),
+    context_adjustments: z.array(contextAdjustmentSchema),
+    recommended_action: recommendedActionSchema.nullable(),
+    draft_customer_message: z.string().nullable(),
+  }).strict(),
+}).strict();
+
+export type LiveClaimAnalysisResponse = z.infer<typeof liveClaimAnalysisResponseSchema>;
 
 export interface ClaimFilters {
   risk?: string;

@@ -4,7 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Router } from 'wouter';
-import type { Claim, ClaimEvent, Intervention } from '../lib/claimsignal-types';
+import type { Claim, ClaimEvent, Intervention, LiveClaimAnalysisResponse } from '../lib/claimsignal-types';
 
 Object.assign(globalThis, { React });
 const { default: Dashboard } = await import('./dashboard');
@@ -54,11 +54,12 @@ function renderDashboard(claims: Claim[], interventions: Intervention[]) {
   );
 }
 
-function renderClaim(claim: Claim, events: ClaimEvent[], interventions: Intervention[] = []) {
+function renderClaim(claim: Claim, events: ClaimEvent[], interventions: Intervention[] = [], liveAnalysis: LiveClaimAnalysisResponse | null = null) {
   const client = new QueryClient();
   client.setQueryData(['claims', claim.claim_id], claim);
   client.setQueryData(['claim-events', claim.claim_id], events);
   client.setQueryData(['interventions', 'all'], interventions);
+  client.setQueryData(['live-claim-analysis', claim.claim_id], liveAnalysis);
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <Router ssrPath={`/claims/${claim.claim_id}`}>
@@ -105,6 +106,7 @@ test('rendered CLM-1847 journey shows risk change, operational evidence, structu
   assert.match(html, /Assessment overdue/);
   assert.match(html, /External assessment remains pending/);
   assert.match(html, /AI assessment based on the claim event record and current operational signals/);
+  assert.match(html, /Demo assessment/);
   assert.doesNotMatch(html, /mock_ai_analysis/);
   assert.match(html, /Missed callbacks/);
   assert.match(html, /Two promised callbacks were not completed/);
@@ -173,4 +175,89 @@ test('rendered CLM-2205 journey explains accepted delay and falling risk', () =>
   assert.match(html, /Resume claim processing on agreed date/);
   assert.match(html, /claims professional remains responsible/);
   assert.doesNotMatch(html, /No open recommendation is associated/);
+});
+
+test('live AI renders separately validated context without changing risk or intervention controls', () => {
+  const claim = makeClaim('CLM-1847', {
+    customer_name: 'Sarah Lim',
+    previous_risk_score: 42,
+    risk_score: 78,
+    risk_level: 'high',
+    customer_contact_count: 4,
+    mock_ai_analysis: {
+      summary: 'Demo fallback.',
+      signals: [],
+      recommended_action: null,
+      draft_customer_message: null,
+    },
+  });
+  const liveAnalysis: LiveClaimAnalysisResponse = {
+    source: 'live_ai',
+    claim_id: 'CLM-1847',
+    analysis: {
+      predicted_issue: 'Customer escalation',
+      summary: 'Repeated contacts, missed callbacks, and a stalled assessment increase concern.',
+      signals: [{ signal: 'Missed callbacks', severity: 'high', evidence: 'Two callbacks were missed.' }],
+      context_adjustments: [{
+        factor: 'Assessment inactivity',
+        effect: 'increases_concern',
+        evidence: 'The assessment remains stalled.',
+      }],
+      recommended_action: {
+        action: 'Call customer today',
+        urgency: 'today',
+        owner: 'Amelia Tan',
+        reason: 'Prevent escalation.',
+      },
+      draft_customer_message: 'We will call today.',
+    },
+  };
+
+  const html = renderClaim(
+    claim,
+    [makeEvent('CLM-1847', 'Assessment overdue', 'External assessment remains pending.', 36)],
+    [makeIntervention('CLM-1847')],
+    liveAnalysis,
+  );
+
+  assert.match(html, /Live AI assessment/);
+  assert.match(html, /Repeated contacts, missed callbacks, and a stalled assessment increase concern/);
+  assert.match(html, /Context adjustments/);
+  assert.match(html, /Increases concern/);
+  assert.match(html, /78 high/);
+  assert.match(html, />42</);
+  assert.match(html, /Approve intervention/);
+  assert.match(html, /Dismiss/);
+});
+
+test('live AI can render Mei Chen mitigating context without changing the risk decrease', () => {
+  const claim = makeClaim('CLM-2205', {
+    customer_name: 'Mei Chen',
+    previous_risk_score: 65,
+    risk_score: 32,
+    risk_level: 'low',
+    latest_customer_message: 'No rush until I return.',
+  });
+  const html = renderClaim(claim, [], [], {
+    source: 'live_ai',
+    claim_id: 'CLM-2205',
+    analysis: {
+      predicted_issue: null,
+      summary: 'The customer-requested hold reduces current escalation concern.',
+      signals: [{ signal: 'Inactivity', severity: 'low', evidence: 'The claim remains paused.' }],
+      context_adjustments: [{
+        factor: 'Customer-requested delay',
+        effect: 'reduces_concern',
+        evidence: 'The customer accepted the delay while travelling.',
+      }],
+      recommended_action: null,
+      draft_customer_message: null,
+    },
+  });
+
+  assert.match(html, /Live AI assessment/);
+  assert.match(html, /Reduces concern/);
+  assert.match(html, /32 low/);
+  assert.match(html, />65</);
+  assert.match(html, /Decreased/);
 });

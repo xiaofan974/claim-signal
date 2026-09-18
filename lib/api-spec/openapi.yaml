@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: claims
+    description: Claim analysis operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /claim-analysis:
+    post:
+      operationId: analyzeClaim
+      tags: [claims]
+      summary: Analyze a claim with live AI
+      description: Proxies a claim identifier to the configured Supabase Edge Function and returns validated contextual analysis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimAnalysisInput"
+      responses:
+        "200":
+          description: Validated live claim analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveClaimAnalysisResponse"
+        "400":
+          description: Invalid claim identifier
+        "502":
+          description: Live analysis service failed or returned invalid data
+        "504":
+          description: Live analysis service timed out
 components:
   schemas:
     HealthStatus:
@@ -33,4 +60,91 @@ components:
           type: string
       required:
         - status
+    ClaimAnalysisInput:
+      type: object
+      additionalProperties: false
+      required: [claim_id]
+      properties:
+        claim_id:
+          type: string
+          minLength: 1
+    ClaimAnalysisSignal:
+      type: object
+      additionalProperties: false
+      required: [signal, severity, evidence]
+      properties:
+        signal:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high]
+        evidence:
+          type: string
+    ClaimContextAdjustment:
+      type: object
+      additionalProperties: false
+      required: [factor, effect, evidence]
+      properties:
+        factor:
+          type: string
+        effect:
+          type: string
+          enum: [increases_concern, reduces_concern, neutral]
+        evidence:
+          type: string
+    ClaimRecommendedAction:
+      type: object
+      additionalProperties: false
+      required: [action, urgency, owner, reason]
+      properties:
+        action:
+          type: string
+        urgency:
+          type: string
+          enum: [today, 24_hours, this_week, none]
+        owner:
+          type: string
+        reason:
+          type: string
+    LiveClaimAnalysis:
+      type: object
+      additionalProperties: false
+      required:
+        - predicted_issue
+        - summary
+        - signals
+        - context_adjustments
+        - recommended_action
+        - draft_customer_message
+      properties:
+        predicted_issue:
+          type: ["string", "null"]
+        summary:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClaimAnalysisSignal"
+        context_adjustments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClaimContextAdjustment"
+        recommended_action:
+          anyOf:
+            - $ref: "#/components/schemas/ClaimRecommendedAction"
+            - type: "null"
+        draft_customer_message:
+          type: ["string", "null"]
+    LiveClaimAnalysisResponse:
+      type: object
+      additionalProperties: false
+      required: [source, claim_id, analysis]
+      properties:
+        source:
+          type: string
+          const: live_ai
+        claim_id:
+          type: string
+        analysis:
+          $ref: "#/components/schemas/LiveClaimAnalysis"
 

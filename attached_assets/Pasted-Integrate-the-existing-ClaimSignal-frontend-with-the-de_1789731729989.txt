@@ -1,0 +1,410 @@
+Integrate the existing ClaimSignal frontend with the deployed Supabase Edge Function:
+
+Function name:
+analyze-claim
+
+Do not redesign the UI.
+Do not change the Supabase schema.
+Do not change any seeded risk scores or risk levels.
+Do not change the deterministic risk engine.
+Do not remove mock_ai_analysis.
+
+The goal is to make the existing AI Assessment section use live structured AI when available, while preserving a seamless fallback to mock_ai_analysis.
+
+==================================================
+1. ARCHITECTURE
+==================================================
+
+Use this flow:
+
+Claim Detail page
+→ application service
+→ server-side route
+→ Supabase Edge Function analyze-claim
+→ validated structured analysis
+→ existing AI Assessment UI
+
+Do NOT call the Edge Function directly from a public browser component if doing so requires exposing privileged credentials.
+
+Do NOT expose:
+- OpenAI API keys
+- Supabase service-role keys
+- private server credentials
+
+Keep secrets server-side.
+
+==================================================
+2. REQUEST CONTRACT
+==================================================
+
+The Edge Function expects:
+
+POST
+analyze-claim
+
+Body:
+
+{
+  "claim_id": "CLM-1847"
+}
+
+The browser/application should not send the full claim record.
+
+The Edge Function re-fetches authoritative claim data and claim_events from Supabase.
+
+==================================================
+3. RESPONSE CONTRACT
+==================================================
+
+Expected successful response:
+
+{
+  "source": "live_ai",
+  "claim_id": "CLM-1847",
+  "analysis": {
+    "predicted_issue": "string | null",
+    "summary": "string",
+    "signals": [
+      {
+        "signal": "string",
+        "severity": "low | medium | high",
+        "evidence": "string"
+      }
+    ],
+    "context_adjustments": [
+      {
+        "factor": "string",
+        "effect": "increases_concern | reduces_concern | neutral",
+        "evidence": "string"
+      }
+    ],
+    "recommended_action": {
+      "action": "string",
+      "urgency": "today | 24_hours | this_week | none",
+      "owner": "string",
+      "reason": "string"
+    },
+    "draft_customer_message": "string | null"
+  }
+}
+
+Create a strict Zod schema for this response.
+
+Do not render unvalidated live-model output.
+
+==================================================
+4. FRONTEND SERVICE
+==================================================
+
+Create a dedicated service, for example:
+
+src/services/liveClaimAnalysis.ts
+
+Expose:
+
+getLiveClaimAnalysis(claimId)
+
+Do not put fetch logic directly inside visual components.
+
+The service should:
+1. call the application server route
+2. validate the returned JSON
+3. return structured ClaimAnalysis data
+4. throw a controlled error if validation fails
+
+==================================================
+5. FALLBACK LOGIC
+==================================================
+
+The existing mock_ai_analysis is the fallback.
+
+Use this priority:
+
+1. Live AI analysis succeeds
+→ render live analysis
+
+2. Live AI fails
+→ use mock_ai_analysis
+
+3. mock_ai_analysis is also unavailable
+→ use the current deterministic fallback based on:
+   - risk_score
+   - main_signal
+   - predicted_issue
+   - recommended_action
+
+The Claim Detail page must remain usable in all three states.
+
+A live-model failure must NEVER block:
+- viewing claim details
+- viewing claim_events
+- viewing risk score
+- viewing interventions
+- approving or dismissing an intervention
+
+==================================================
+6. SOURCE INDICATOR
+==================================================
+
+Add a small unobtrusive source indicator inside the AI Assessment section.
+
+For live analysis:
+
+“Live AI assessment”
+
+For fallback:
+
+“Demo assessment”
+
+Do not use alarming warning styling for fallback.
+
+This indicator should be visually subtle.
+
+Do NOT show:
+- raw API names
+- model names
+- internal field names
+- technical stack details
+
+==================================================
+7. LOADING STATE
+==================================================
+
+When live analysis is loading:
+
+Keep the rest of the Claim Detail page visible.
+
+Only the AI Assessment section should show a skeleton/loading state.
+
+Do not block the whole page.
+
+Suggested copy:
+
+“Analyzing claim context…”
+
+==================================================
+8. TIMEOUT AND FAILURE
+==================================================
+
+Use a reasonable timeout.
+
+If the live AI request fails or times out:
+
+Silently switch to the structured demo fallback.
+
+Do not show a technical error to the recruiter/demo user.
+
+If useful, show a subtle status:
+
+“Demo assessment”
+
+Log the technical failure only in development/server logs.
+
+Do not repeatedly retry automatically.
+
+==================================================
+9. DO NOT CHANGE RISK
+==================================================
+
+This is critical.
+
+The model must never:
+- calculate risk_score
+- overwrite risk_score
+- overwrite previous_risk_score
+- overwrite risk_level
+- change the risk direction
+- write new risk values to Supabase
+
+The existing deterministic risk values remain the source of truth.
+
+The AI is only responsible for:
+- contextual interpretation
+- evidence explanation
+- context adjustments
+- recommendation
+- optional communication draft
+
+==================================================
+10. CONTEXT ADJUSTMENTS
+==================================================
+
+Render context_adjustments when present.
+
+This is especially important for CLM-2205 / Mei Chen.
+
+Example:
+
+Customer-requested delay
+Reduces concern
+
+“The customer explicitly accepted the delay while travelling.”
+
+Use a calmer visual treatment for reduces_concern.
+
+For increases_concern, use warning styling.
+
+For neutral, use neutral styling.
+
+Do not collapse these into the signals list.
+
+Signals and context adjustments serve different product purposes.
+
+==================================================
+11. SARAH LIM TEST
+==================================================
+
+CLM-1847 must still communicate:
+
+Risk:
+42 → 78
+High
+Increased
+
+Live AI should be able to explain:
+- repeated contacts
+- missed callbacks
+- stalled assessment
+
+Recommended action should remain preventative.
+
+The model must NOT alter the 78 risk score.
+
+==================================================
+12. JAMES TAN TEST
+==================================================
+
+CLM-0914 must still communicate:
+
+Risk:
+39 → 61
+Medium
+Increased
+
+Customer contacts:
+0
+
+Live AI should recognize that:
+- an operational milestone was missed
+- there has been no meaningful update
+- customer dissatisfaction is not yet explicit
+
+The analysis should remain an early-warning interpretation.
+
+Do not claim the customer has complained.
+
+==================================================
+13. MEI CHEN TEST
+==================================================
+
+CLM-2205 must still communicate:
+
+Risk:
+65 → 32
+Low
+Decreased
+
+Live AI should recognize mitigating context:
+
+- customer-requested hold
+- customer accepted delay
+- no current urgency
+
+Expected outcome:
+
+context_adjustments should include at least one:
+effect = reduces_concern
+
+The AI should be allowed to recommend:
+
+“No immediate intervention”
+
+or equivalent.
+
+The model must NOT raise the risk score.
+
+==================================================
+14. HUMAN REVIEW
+==================================================
+
+Preserve the existing:
+
+Human review required
+
+and the principle:
+
+“This is decision support. A claims professional remains responsible for reviewing the evidence and deciding whether to act.”
+
+Do not let live AI change this language into autonomous-action wording.
+
+==================================================
+15. INTERVENTION WORKFLOW
+==================================================
+
+Do not change the existing working intervention workflow.
+
+Live AI may provide:
+- recommended_action
+- draft_customer_message
+
+But the user must still manually click:
+- Approve intervention
+- Edit
+- Dismiss
+
+Do not automatically create or approve interventions from the live AI result.
+
+==================================================
+16. SERVER ROUTE SECURITY
+==================================================
+
+Create a server-side route that safely invokes the Supabase Edge Function.
+
+Do not expose:
+- OPENAI_API_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- privileged credentials
+
+If the Edge Function requires authenticated invocation, handle that on the server side.
+
+The browser should only call the application server route.
+
+==================================================
+17. TESTS
+==================================================
+
+Preserve all existing tests.
+
+Add tests for:
+
+1. Live AI success
+2. Live AI timeout
+3. Live AI malformed response
+4. Fallback to mock_ai_analysis
+5. Sarah retains risk 78
+6. James retains customer_contact_count = 0
+7. Mei retains risk 32
+8. Mei renders reduces_concern context
+9. No live AI response can mutate risk_score
+10. Intervention approval still works after live analysis loads
+
+All TypeScript checks must pass.
+
+==================================================
+18. ACCEPTANCE CRITERIA
+==================================================
+
+The integration is complete when:
+
+- Claim Detail loads normally
+- risk data still comes from Supabase
+- live AI analysis can appear in the existing UI
+- mock_ai_analysis remains a fallback
+- no model output changes risk values
+- Sarah, James, and Mei still tell their distinct product stories
+- the AI Assessment section is the only part that depends on the live model
+- human approval remains required
+- existing intervention workflows still work
+- all tests pass
+
+Do not add any new product features until this integration is stable.
