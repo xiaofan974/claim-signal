@@ -32,7 +32,7 @@ AI-powered early warning and human-reviewed intervention planning for insurance 
 ## Architecture decisions
 
 - Existing Supabase seed data is the demo source of truth; the prototype risk calculator never overwrites curated scores.
-- AI analysis is structured mock data for V1, parsed defensively with deterministic evidence-based fallback.
+- Live AI analysis is generated through the application API server and a Supabase Edge Function, using structured OpenAI output and Zod validation. If live analysis is unavailable or invalid, the application falls back to stored `mock_ai_analysis`, then to a deterministic claim-record assessment. The AI layer cannot modify risk scores or risk levels.
 - Scheduling or dismissing an intervention updates both its audit record and the claim summary; no communication is sent.
 - Live claim-analysis protection uses PostgreSQL as its shared store so it remains consistent when API instances are scaled horizontally:
   - Validated analysis responses are cached in `claim_analysis_cache` for 60 seconds.
